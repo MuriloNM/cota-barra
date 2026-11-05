@@ -9,11 +9,11 @@ Mostra a cota semanal do Claude fora do Claude, no Windows 11, numa janelinha co
 | Pílula (escolhida) | `abrir-pilula.cmd` | `fechar-pilula.cmd` |
 | Ícone na bandeja | `abrir-bandeja.cmd` | `fechar-bandeja.cmd` |
 
-Também dá para fechar pelo botão direito. Nada abre sozinho com o Windows.
+Também dá para fechar pelo botão direito. Para a pílula abrir com o Windows, marque "Abrir com o Windows" no menu dela; desmarque para desligar. Vale só para o seu usuário. A bandeja não abre sozinha.
 
 ## Como usar
 
-- **Pílula:** clique alterna entre as duas contas e cada uma sozinha; arrastar muda o lugar; passar o mouse mostra o detalhe. O botão direito abre o menu: contas, monitor, tema (igual ao Windows, escuro, claro), tamanho (pequeno a grande), fundo (sólido, translúcido, transparente), fonte (as de largura fixa instaladas e a Segoe UI), voltar ao visual padrão, esconder 30 min, posição automática e fechar. Tudo fica salvo em `%LOCALAPPDATA%\cota-barra\pilula.json`.
+- **Pílula:** clique alterna entre as duas contas e cada uma sozinha; arrastar muda o lugar; passar o mouse mostra o detalhe. O botão direito abre o menu: contas, monitor, tema (igual ao Windows, escuro, claro), tamanho (pequeno a grande), fundo (sólido, translúcido, transparente), fonte (as de largura fixa instaladas e a Segoe UI), voltar ao visual padrão (pequeno e transparente, a escolha do Murilo), esconder 30 min, posição automática, abrir com o Windows e fechar. Tudo fica salvo em `%LOCALAPPDATA%\cota-barra\pilula.json`.
 - **Bandeja:** um ícone por conta (Padrão = quadrado, Trabalho = círculo). O Windows põe ícones novos na área oculta (`^`): arraste os dois para a barra.
 
 ## Como é feita

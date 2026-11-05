@@ -131,7 +131,9 @@ namespace CotaBarra {
     ToolStripMenuItem itemAmbas, itemPad, itemTrab;
 
     string vista = "ambas"; int? manual;
-    string tema = "auto", tamanho = "normal", fundo = "opaco", fonte = "JetBrains Mono", monitor;   // monitor null = o principal
+    // O padrão é o visual que o Murilo escolheu em 04/11/2026: pequeno e transparente.
+    const string TamanhoPadrao = "pequena", FundoPadrao = "transparente";
+    string tema = "auto", tamanho = TamanhoPadrao, fundo = FundoPadrao, fonte = "JetBrains Mono", monitor;   // monitor null = o principal
     ToolStripMenuItem subMonitor, subFonte;
     readonly List<Action> marcas = new List<Action>();
     DateTime escondidaAte = DateTime.MinValue, ultimaVarredura = DateTime.MinValue, ultimoDado = DateTime.MinValue;
@@ -217,13 +219,16 @@ namespace CotaBarra {
       menu.Items.Add(Opcoes("Fundo", new[] { "opaco", "Sólido", "translucido", "Translúcido", "transparente", "Transparente" }, () => fundo, v => fundo = v));
       menu.Items.Add(subFonte);
       menu.Items.Add("Voltar ao visual padrão", null, delegate {
-        tema = "auto"; tamanho = "normal"; fundo = "opaco"; fonte = "JetBrains Mono";
+        tema = "auto"; tamanho = TamanhoPadrao; fundo = FundoPadrao; fonte = "JetBrains Mono";
         foreach (Action m in marcas) m();
         SalvarConfig(); Atualizar(true);
       });
       menu.Items.Add(new ToolStripSeparator());
       menu.Items.Add("Esconder por 30 min", null, delegate { escondidaAte = DateTime.Now.AddMinutes(30); AtualizarVisibilidade(); });
       menu.Items.Add("Voltar à posição automática", null, delegate { manual = null; SalvarConfig(); Atualizar(true); });
+      ToolStripMenuItem itemInicio = new ToolStripMenuItem("Abrir com o Windows", null, delegate { MudarInicio(!AbreComWindows()); });
+      menu.Items.Add(itemInicio);
+      menu.Opening += delegate { itemInicio.Checked = AbreComWindows(); };
       menu.Items.Add(new ToolStripSeparator());
       menu.Items.Add("Fechar", null, delegate { Fechar(); });
       // Monitores podem entrar e sair: a lista é refeita a cada abertura. As fontes, só na primeira.
@@ -293,6 +298,18 @@ namespace CotaBarra {
       a.AlfaFundo = fundo == "transparente" ? 1 : fundo == "translucido" ? 150 : 245;
       a.Claro = tema == "claro" || (tema == "auto" && WindowsClaro());
       return a;
+    }
+    // Só do usuário atual: a entrada "CotaBarra" em Run, que também aparece em Aplicativos de inicialização do Windows.
+    const string ChaveRun = @"Software\Microsoft\Windows\CurrentVersion\Run";
+    static bool AbreComWindows() {
+      try { using (Microsoft.Win32.RegistryKey k = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(ChaveRun)) return k != null && k.GetValue("CotaBarra") != null; } catch { return false; }
+    }
+    static void MudarInicio(bool ligar) {
+      try {
+        using (Microsoft.Win32.RegistryKey k = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(ChaveRun, true)) {
+          if (ligar) k.SetValue("CotaBarra", "\"" + Application.ExecutablePath + "\""); else k.DeleteValue("CotaBarra", false);
+        }
+      } catch (Exception ex) { Registrar("início com o Windows: " + ex.Message); }
     }
     static bool WindowsClaro() {
       try { object v = Microsoft.Win32.Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "SystemUsesLightTheme", 0); return v is int && (int)v == 1; } catch { return false; }
