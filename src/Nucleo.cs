@@ -324,8 +324,10 @@ namespace CotaBarra {
           foreach (Conta c in lista) larg = Math.Max(larg, Medir(gm, linhaRitmo(c), fN, fmt));
           larg = Math.Max(larg, Medir(gm, Legenda, fP, fmt));
         }
-        int hConta = (int)(hN * 3 + altoBarra + (int)(8 * esc) + (int)(4 * esc));
-        alt = pad * 2 + lista.Count * hConta + (lista.Count - 1) * entre + (int)(hP + 10 * esc);
+        alt = pad * 2 + (int)(hP + 10 * esc);
+        foreach (Conta c in lista)
+          alt += (int)(hN * 2) + (int)(4 * esc) + entre + (TemNumero(c) ? (int)hN + altoBarra + (int)(8 * esc) : 0);
+        alt -= entre;
         int w = larg + pad * 2;
         Bitmap bmp = new Bitmap(w, alt, PixelFormat.Format32bppPArgb);
         using (Graphics g = Graphics.FromImage(bmp)) {
@@ -357,7 +359,6 @@ namespace CotaBarra {
               }
               g.DrawString(linhaRitmo(c), fN, c.Estado == "velha" ? bA : bW, pad, y, fmt);
               y += hN + entre;
-              if (!TemNumero(c)) y += hN + altoBarra + (int)(8 * esc);
             }
             y -= entre - (int)(Sep * esc);
             g.DrawString(Legenda, fP, bW, pad, y, fmt);
