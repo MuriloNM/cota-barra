@@ -4,6 +4,22 @@
 
 Mostra a cota semanal do Claude sobre a barra de tarefas do Windows 11: quanto você já usou, quanto seria esperado hoje e onde a semana deve fechar.
 
+![A pílula na barra de tarefas, ao lado do relógio: barra em células, 22% usado, projeção de 65%, Fable 1%, lida há 3 minutos](docs/pilula.png)
+
+| Mouse em cima: detalhe | Botão direito: ajustes |
+|---|---|
+| ![Cartão com a barra, usado, esperado e projeção](docs/cartao.png) | ![Painel de ajustes com contas, monitor, estilo, paleta, onda, tema, tamanho, fundo e fonte](docs/painel.png) |
+
+Duas contas, com a onda opcional passando pelas barras:
+
+![Três momentos da onda andando pelas barras de duas contas](docs/onda.png)
+
+Dentro do Claude, o plugin mostra o mesmo ritmo em texto:
+
+```text
+Cota semanal 21% (esperado 34%) 🟢 Folga · projeção 62% · Reseta em 4.6d · Pode gastar 17%/dia
+```
+
 Precisa do [plugin `cota`](https://github.com/MuriloNM/claude-cota), que roda dentro do Claude e guarda a leitura. Este programa só lê esse arquivo: **não usa rede, não usa credenciais e nunca grava no arquivo do plugin**.
 
 É um protótipo, sem assinatura digital. Só atualiza com o Claude aberto.

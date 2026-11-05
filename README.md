@@ -4,6 +4,22 @@
 
 Shows your weekly Claude quota over the Windows 11 taskbar: how much you used, how much is expected by today, and where the week should end.
 
+![The pill on the taskbar, next to the clock: a bar in cells, 22% used, projected 65%, Fable 1%, read 3 minutes ago](docs/pilula.png)
+
+| Hover: details | Right-click: settings |
+|---|---|
+| ![Details card with the bar, used, expected and projected](docs/cartao.png) | ![Settings panel with accounts, monitor, style, palette, wave, theme, size, background and font](docs/painel.png) |
+
+Two accounts, with the optional wave passing over the bars:
+
+![Three moments of the wave moving along the bars of two accounts](docs/onda.png)
+
+Inside Claude, the plugin shows the same pace in text:
+
+```text
+Cota semanal 21% (esperado 34%) 🟢 Folga · projeção 62% · Reseta em 4.6d · Pode gastar 17%/dia
+```
+
 It needs the [`cota` plugin](https://github.com/MuriloNM/claude-cota), which runs inside Claude and saves the reading. This program only reads that file: **no network, no credentials, and it never writes to the plugin's file**.
 
 It is an unsigned prototype. It only updates while Claude is open. The interface is in Brazilian Portuguese.
