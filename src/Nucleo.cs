@@ -46,15 +46,19 @@ namespace CotaBarra {
   public class Conta {
     public string Rotulo, Estado = "sem", Cor = "cinza", Idade = "", Detalhe, RestaTxt = "", LidaTxt = "";   // Estado: ok | velha | vencida | sem
     public int Usado, Esperado, Projecao, Diferenca, ProjecaoMedia;
-    public double VelDia, HorasHistorico, DiasAte100 = -1;   // pontos por dia, horas de histórico nesta semana, dias até 100% antes do reset (-1: não chega)
-    public string Assinatura() { return Rotulo + "|" + Estado + "|" + Cor + "|" + Usado + "|" + Esperado + "|" + Projecao + "|" + Idade; }
+    public int DiasHistorico;                  // dias completos de histórico, de qualquer semana
+    public double VelDia, DiasAte100 = -1;     // dia típico em pontos, dias até 100% antes do reset (-1: não chega)
+    // Janela de 5 h: só existe se o arquivo trouxer. No plano sem essa janela, nada disso aparece.
+    public bool Tem5h, Velha5h; public int Uso5h; public string Reset5hTxt = "";
+    public double Vel5hHora, Acaba5hMin = -1;  // pontos por hora agora, minutos até 100% antes do reset (-1: não acaba)
+    public string Assinatura() { return Rotulo + "|" + Estado + "|" + Cor + "|" + Usado + "|" + Esperado + "|" + Projecao + "|" + Idade + "|" + Uso5h + "|" + Velha5h + "|" + Cota.Inteiro(Acaba5hMin / 5); }
   }
 
   public class Ponto { public long Lido; public double Usado; public DateTimeOffset Reset; }
 
   // Histórico das leituras, em arquivo próprio: o arquivo de cota guarda só a última e nunca é alterado.
   public static class Historico {
-    const int GuardarDias = 21;
+    const int GuardarDias = 56;   // o aprendizado atravessa as semanas
     static readonly Dictionary<string, List<Ponto>> pontos = new Dictionary<string, List<Ponto>>();
     static string arquivo;
 
@@ -87,7 +91,13 @@ namespace CotaBarra {
       DateTimeOffset reset;
       if (!DateTimeOffset.TryParse(l.ResetsAt, CultureInfo.InvariantCulture, DateTimeStyles.None, out reset)) return;
       List<Ponto> lista = Lista(conta);
-      if (lista.Count > 0 && lista[lista.Count - 1].Lido >= l.Lido.Value) return;
+      if (lista.Count > 0) {
+        Ponto u = lista[lista.Count - 1];
+        if (u.Lido >= l.Lido.Value) return;
+        // Leitura igual à anterior, no mesmo dia, não ensina nada: não ocupa espaço.
+        bool mesmoDia = DateTimeOffset.FromUnixTimeMilliseconds(u.Lido).ToLocalTime().Date == DateTimeOffset.FromUnixTimeMilliseconds(l.Lido.Value).ToLocalTime().Date;
+        if (mesmoDia && u.Usado == l.Usado.Value && Math.Abs((u.Reset - reset).TotalMinutes) <= 5) return;
+      }
       lista.Add(new Ponto { Lido = l.Lido.Value, Usado = l.Usado.Value, Reset = reset });
       try { File.AppendAllText(arquivo, conta + "\t" + l.Lido.Value + "\t" + l.Usado.Value.ToString(CultureInfo.InvariantCulture) + "\t" + l.ResetsAt + Environment.NewLine); } catch { }
     }
@@ -96,7 +106,69 @@ namespace CotaBarra {
   public static class Cota {
     public const double SemanaMs = 604800000.0;
     public const int VelhaDepoisMin = 120;   // leitura com mais de 2 h aparece como velha
-    public const double JanelaHoras = 48;    // a velocidade olha as últimas 48 h: pega dia e noite, e não só as horas de trabalho
+    public const int DiasParaConfiar = 7;    // com 7 dias completos de histórico, a projeção semanal vale só pelo dia típico
+
+    // Dia típico: quantos pontos a pessoa usa num dia, aprendido entre semanas. Conta todo dia desde a primeira
+    // leitura, inclusive os sem uso; a partir de 3 dias ignora o maior, para um pico isolado não puxar a previsão.
+    public static double DiaTipico(IList<Ponto> historico, DateTimeOffset agora, out int dias) {
+      dias = 0;
+      if (historico == null || historico.Count == 0) return 0;
+      List<Ponto> pts = new List<Ponto>(historico);
+      pts.Sort((a, b) => a.Lido.CompareTo(b.Lido));
+      Func<long, DateTime> dia = ms => DateTimeOffset.FromUnixTimeMilliseconds(ms).ToLocalTime().Date;
+      DateTime hoje = agora.ToLocalTime().Date, primeiro = dia(pts[0].Lido);
+      Dictionary<DateTime, double> porDia = new Dictionary<DateTime, double>();
+      for (int i = 1; i < pts.Count; i++) {
+        bool mesmaSemana = Math.Abs((pts[i].Reset - pts[i - 1].Reset).TotalMinutes) <= 5;
+        double delta = mesmaSemana ? Math.Max(pts[i].Usado - pts[i - 1].Usado, 0) : pts[i].Usado;   // semana nova começa do zero
+        DateTime d = dia(pts[i].Lido); double v;
+        porDia.TryGetValue(d, out v); porDia[d] = v + delta;
+      }
+      List<double> valores = new List<double>();
+      for (DateTime d = hoje.AddDays(-1); d > primeiro && valores.Count < 28; d = d.AddDays(-1)) {   // hoje está pela metade; o primeiro dia também
+        double v; porDia.TryGetValue(d, out v); valores.Add(v);
+      }
+      dias = valores.Count;
+      if (dias == 0) return 0;
+      valores.Sort();
+      int usar = dias >= 3 ? dias - 1 : dias;
+      double soma = 0;
+      for (int i = 0; i < usar; i++) soma += valores[i];
+      return soma / usar;
+    }
+
+    // Janela de 5 h: a velocidade de agora é a da última hora; sem ela, a média desde o início da janela.
+    public const double Janela5hHoras = 5;
+    public static void Calcular5h(Conta c, Leitura l, DateTimeOffset agora, IList<Ponto> historico) {
+      if (l == null || l.Usado == null || l.Lido == null) return;
+      DateTimeOffset reset;
+      if (!DateTimeOffset.TryParse(l.ResetsAt, CultureInfo.InvariantCulture, DateTimeStyles.None, out reset) || reset <= agora) return;
+      long agoraMs = agora.ToUnixTimeMilliseconds();
+      double usado = l.Usado.Value, restaH = (reset - agora).TotalHours;
+      c.Tem5h = true; c.Uso5h = Inteiro(usado);
+      int restaMin = (int)Math.Ceiling(restaH * 60);
+      c.Reset5hTxt = restaMin < 60 ? restaMin + " min" : (restaMin / 60) + " h " + (restaMin % 60).ToString("00");
+      c.Velha5h = agoraMs - l.Lido.Value > 30 * 60000;   // velha aqui é bem mais cedo que na semana
+      if (c.Velha5h) return;
+      double porHora = -1;
+      if (historico != null) {
+        Ponto base1 = null;
+        foreach (Ponto p in historico) {
+          if (Math.Abs((p.Reset - reset).TotalMinutes) > 5 || p.Lido >= l.Lido.Value || l.Lido.Value - p.Lido > 3600000) continue;
+          if (base1 == null || p.Lido < base1.Lido) base1 = p;
+        }
+        if (base1 != null && l.Lido.Value - base1.Lido >= 10 * 60000)
+          porHora = Math.Max(usado - base1.Usado, 0) / ((l.Lido.Value - base1.Lido) / 3600000.0);
+      }
+      if (porHora < 0) {
+        double passou = Janela5hHoras - restaH;
+        if (passou >= 0.25) porHora = usado / passou;
+      }
+      if (porHora < 0) return;
+      c.Vel5hHora = porHora;
+      if (usado >= 100) { c.Acaba5hMin = 0; return; }
+      if (porHora > 0 && (100 - usado) / porHora < restaH) c.Acaba5hMin = (100 - usado) / porHora * 60;
+    }
 
     // O nome do arquivo muda de instalação para instalação: vale o mais recente.
     public static string Arquivo() {
@@ -147,28 +219,17 @@ namespace CotaBarra {
       c.Usado = Inteiro(usado); c.Esperado = Inteiro(esperado); c.Diferenca = Inteiro(dif); c.ProjecaoMedia = Inteiro(projecao);
       c.Estado = min > VelhaDepoisMin ? "velha" : "ok";
 
-      // Velocidade real: quanto subiu nas últimas 48 h desta semana. O peso cresce com o histórico,
-      // de 0 a 100% em 48 h, para a projeção sair da média da semana sem dar saltos.
+      // Dia típico aprendido: o peso cresce com os dias de histórico, para a projeção sair da média sem dar saltos.
       if (historico != null) {
-        long inicioJanela = agoraMs - (long)(JanelaHoras * 3600000);
-        Ponto primeiro = null, ultimo = null;
-        foreach (Ponto p in historico) {
-          if (Math.Abs((p.Reset - reset).TotalMinutes) > 5 || p.Lido < inicioJanela) continue;
-          if (primeiro == null || p.Lido < primeiro.Lido) primeiro = p;
-          if (ultimo == null || p.Lido > ultimo.Lido) ultimo = p;
-        }
-        if (primeiro != null && ultimo != null) {
-          double horas = (ultimo.Lido - primeiro.Lido) / 3600000.0;
-          c.HorasHistorico = horas;
-          if (horas >= 2) {
-            double porHora = Math.Max(ultimo.Usado - primeiro.Usado, 0) / horas;
-            c.VelDia = porHora * 24;
-            double restaHoras = resta / 3600000.0;
-            double projVel = usado + porHora * restaHoras;
-            double peso = Math.Min(horas / JanelaHoras, 1);
-            projecao = Math.Max(usado, peso * projVel + (1 - peso) * projecao);
-            if (porHora > 0 && usado < 100 && (100 - usado) / porHora < restaHoras) c.DiasAte100 = (100 - usado) / porHora / 24;
-          }
+        int diasHist;
+        double porDia = DiaTipico(historico, agora, out diasHist);
+        c.DiasHistorico = diasHist;
+        if (diasHist > 0) {
+          c.VelDia = porDia;
+          double restaDias = resta / 86400000;
+          double peso = Math.Min(diasHist / (double)DiasParaConfiar, 1);
+          projecao = Math.Max(usado, peso * (usado + porDia * restaDias) + (1 - peso) * projecao);
+          if (porDia > 0 && usado < 100 && (100 - usado) / porDia < restaDias) c.DiasAte100 = (100 - usado) / porDia;
         }
       }
       c.Projecao = Inteiro(projecao);
@@ -221,7 +282,12 @@ namespace CotaBarra {
       foreach (string n in nomes) {
         Leitura l = Extrair(json, "ultima:" + n);
         if (usarHistorico) Historico.Registrar(n, l);
-        lista.Add(Calcular(l, RotuloDe(n), agora, usarHistorico ? Historico.De(n) : null));
+        Conta c = Calcular(l, RotuloDe(n), agora, usarHistorico ? Historico.De(n) : null);
+        // Janela de 5 h, se o arquivo trouxer. Quem não tem essa janela no plano segue só com a semana.
+        Leitura l5 = Extrair(json, "cinco_horas:" + n);
+        if (usarHistorico) Historico.Registrar(n + "#5h", l5);
+        Calcular5h(c, l5, agora, usarHistorico ? Historico.De(n + "#5h") : null);
+        lista.Add(c);
       }
       if (lista.Count == 0) lista.Add(Calcular(null, "Claude", agora));
       return lista;
@@ -247,7 +313,13 @@ namespace CotaBarra {
   }
 
   public static class Desenho {
-    class Seg { public string Rotulo = "", Usado = "", Resto = "", Idade = ""; public Conta Conta; public bool TemBarra; }
+    class Seg { public string Rotulo = "", Usado = "", Resto = "", Cinco = "", Idade = ""; public Conta Conta; public bool TemBarra; }
+
+    public static string TextoAcaba5h(double min) {
+      if (min <= 0) return "esgotada";
+      int m = (int)Math.Round(min);
+      return "acaba em " + (m < 60 ? m + " min" : (m / 60) + " h " + (m % 60).ToString("00"));
+    }
 
     static bool TemNumero(Conta c) { return c.Estado == "ok" || c.Estado == "velha"; }
 
@@ -263,6 +335,7 @@ namespace CotaBarra {
       s.TemBarra = barras;
       s.Resto = barras ? "→ " + c.Projecao + "%" : "/ " + c.Esperado + "% → " + c.Projecao + "%";
       s.Idade = c.Estado == "velha" ? "velha " + c.Idade : c.Idade;
+      if (c.Tem5h) s.Cinco = "5h " + c.Uso5h + "%";
       return s;
     }
     static int Medir(Graphics g, string t, Font f, StringFormat fmt) {
@@ -339,13 +412,14 @@ namespace CotaBarra {
         const int Celulas = 20;
         int cel = Math.Max(2, (int)(px * 0.30)), vaoCel = Math.Max(1, (int)(px * 0.10));
         bool algumaBarra = false;
-        int wRot = 0, wUso = 0, wResto = 0, wIdade = 0, wPrompt, altura;
+        int wRot = 0, wUso = 0, wResto = 0, wCinco = 0, wIdade = 0, wPrompt, altura;
         using (Bitmap med = new Bitmap(1, 1)) using (Graphics gm = Graphics.FromImage(med)) {
           foreach (Seg s in linhas) {
             algumaBarra |= s.TemBarra;
             wRot = Math.Max(wRot, Medir(gm, s.Rotulo, fNormal, fmt));
             wUso = Math.Max(wUso, Medir(gm, s.Usado, fForte, fmt));
             wResto = Math.Max(wResto, Medir(gm, s.Resto, fNormal, fmt));
+            wCinco = Math.Max(wCinco, Medir(gm, s.Cinco, fNormal, fmt));
             wIdade = Math.Max(wIdade, Medir(gm, s.Idade, fNormal, fmt));
           }
           wPrompt = Medir(gm, ">", fForte, fmt);
@@ -357,7 +431,8 @@ namespace CotaBarra {
         int xB = x1 + (wRot > 0 ? wRot + vao : 0);
         int x2 = xB + (wBarra > 0 ? wBarra + vao : 0);
         int x3 = x2 + wUso + (wResto > 0 ? (int)(4 * esc) : 0);
-        int x4 = x3 + wResto + (wIdade > 0 ? vao * 2 : 0);
+        int x5 = x3 + wResto + (wCinco > 0 ? vao * 2 : 0);
+        int x4 = x5 + wCinco + (wIdade > 0 ? vao * 2 : 0);
         int largura = x4 + wIdade + pad;
 
         Bitmap bmp = new Bitmap(largura, altura, PixelFormat.Format32bppPArgb);
@@ -383,6 +458,7 @@ namespace CotaBarra {
               }
               if (s.Rotulo.Length > 0) g.DrawString(s.Rotulo, fNormal, bFraco, x1, y, fmt);
               if (s.Resto.Length > 0) g.DrawString(s.Resto, fNormal, ok ? bForte : bFraco, x3, y, fmt);
+              if (s.Cinco.Length > 0) g.DrawString(s.Cinco, fNormal, c.Velha5h ? bFraco : c.Acaba5hMin >= 0 ? bAlerta : bForte, x5, y, fmt);
               if (s.Idade.Length > 0) g.DrawString(s.Idade, fNormal, c.Estado == "velha" ? bAlerta : bFraco, x4, y, fmt);
             }
           }
@@ -404,7 +480,12 @@ namespace CotaBarra {
         int pad = (int)(14 * esc), entre = (int)(14 * esc), n = 36, cel = (int)(6 * esc), vao = Math.Max(1, (int)(1.5 * esc)), altoBarra = (int)(9 * esc);
         int wBarra = LarguraBarra(cel, vao, n);
         const string Legenda = "cheio: usado · claro: projeção · risco: esperado";
-        const double JanelaTexto = Cota.JanelaHoras;
+        Func<Conta, string> linha5h = c => {
+          string t = "5h: " + c.Uso5h + "% · reseta em " + c.Reset5hTxt;
+          if (c.Velha5h) return t + " · leitura velha";
+          if (c.Acaba5hMin >= 0) return t + " · " + TextoAcaba5h(c.Acaba5hMin);
+          return t;
+        };
         const int Sep = 3;
         Func<Conta, string> linhaRitmo = c => {
           if (c.Estado == "sem") return "sem leitura: abra o Claude nesta conta";
@@ -414,10 +495,10 @@ namespace CotaBarra {
         };
         CultureInfo br = CultureInfo.GetCultureInfo("pt-BR");
         Func<Conta, string> linhaVel = c => {
-          if (c.HorasHistorico < 2) return "velocidade: aprendendo, projeção pela média";
-          string v = "vel " + c.VelDia.ToString("0.0", br) + " pts/dia";
+          if (c.DiasHistorico == 0) return "dia típico: aprendendo, projeção pela média";
+          string v = "dia típico " + c.VelDia.ToString("0.0", br) + " pts";
           if (c.DiasAte100 >= 0) return v + " · 100% em " + c.DiasAte100.ToString("0.0", br) + " dias";
-          if (c.HorasHistorico < JanelaTexto) return v + " · aprendendo, " + Cota.Inteiro(c.HorasHistorico) + " h de 48";
+          if (c.DiasHistorico < Cota.DiasParaConfiar) return v + " · aprendendo, " + c.DiasHistorico + " de " + Cota.DiasParaConfiar + " dias";
           return v + " · pela média: " + c.ProjecaoMedia + "%";
         };
         int larg = wBarra, alt;
@@ -427,12 +508,13 @@ namespace CotaBarra {
           foreach (Conta c in lista) {
             larg = Math.Max(larg, Medir(gm, linhaRitmo(c), fN, fmt));
             if (TemNumero(c)) larg = Math.Max(larg, Medir(gm, linhaVel(c), fN, fmt));
+            if (c.Tem5h) larg = Math.Max(larg, Medir(gm, linha5h(c), fN, fmt));
           }
           larg = Math.Max(larg, Medir(gm, Legenda, fP, fmt));
         }
         alt = pad * 2 + (int)(hP + 10 * esc);
         foreach (Conta c in lista)
-          alt += (int)(hN * 2) + (int)(4 * esc) + entre + (TemNumero(c) ? (int)(hN * 2) + altoBarra + (int)(8 * esc) : 0);
+          alt += (int)(hN * 2) + (int)(4 * esc) + entre + (TemNumero(c) ? (int)(hN * 2) + altoBarra + (int)(8 * esc) : 0) + (c.Tem5h ? (int)hN : 0);
         alt -= entre;
         int w = larg + pad * 2;
         Bitmap bmp = new Bitmap(w, alt, PixelFormat.Format32bppPArgb);
@@ -466,7 +548,12 @@ namespace CotaBarra {
                 y += hN;
               }
               g.DrawString(linhaRitmo(c), fN, c.Estado == "velha" ? bA : bW, pad, y, fmt);
-              y += hN + entre;
+              y += hN;
+              if (c.Tem5h) {
+                g.DrawString(linha5h(c), fN, c.Velha5h ? bW : c.Acaba5hMin >= 0 ? bA : bT, pad, y, fmt);
+                y += hN;
+              }
+              y += entre;
             }
             y -= entre - (int)(Sep * esc);
             g.DrawString(Legenda, fP, bW, pad, y, fmt);

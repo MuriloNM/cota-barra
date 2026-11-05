@@ -32,6 +32,23 @@ namespace CotaBarra {
         new Ponto { Lido = Agora.ToUnixTimeMilliseconds(), Usado = usado, Reset = r }
       };
     }
+    // Histórico com um dia por valor, terminando ontem. O primeiro ponto só marca o começo.
+    static List<Ponto> Dias(params double[] porDia) {
+      DateTimeOffset r = Agora.AddHours(84);
+      List<Ponto> l = new List<Ponto>();
+      double soma = 0;
+      l.Add(new Ponto { Lido = Agora.AddDays(-(porDia.Length + 1)).ToUnixTimeMilliseconds(), Usado = 0, Reset = r });
+      for (int i = 0; i < porDia.Length; i++) {
+        soma += porDia[i];
+        l.Add(new Ponto { Lido = Agora.AddDays(-(porDia.Length - i)).ToUnixTimeMilliseconds(), Usado = soma, Reset = r });
+      }
+      return l;
+    }
+    static Conta V5(Leitura l, List<Ponto> h) { Conta c = new Conta { Rotulo = "x" }; Cota.Calcular5h(c, l, Agora, h); return c; }
+    // Um ponto de 5 h: "usado" há "minutos", na janela que reseta em "resetHoras".
+    static List<Ponto> P5(double usado, double minutos, double resetHoras) {
+      return new List<Ponto> { new Ponto { Lido = Agora.AddMinutes(-minutos).ToUnixTimeMilliseconds(), Usado = usado, Reset = Agora.AddHours(resetHoras) } };
+    }
     // Conta as células pintadas com a cor cheia, desenhando a barra de verdade.
     static int Contar(Conta c, int n) {
       using (Bitmap b = new Bitmap(n * 4 + 2, 12)) using (Graphics g = Graphics.FromImage(b)) {
@@ -104,25 +121,50 @@ namespace CotaBarra {
         Confere("os dois estilos desenham coisas diferentes", so.Width != ba.Width, true);
       Confere("paleta desconhecida cai na Tokyo Night", Paleta.De("nada", false).Fundo, Paleta.De("tokyo", false).Fundo);
 
-      Console.WriteLine("--- Velocidade (reset em 84 h; usado 50; pela média daria 100)");
+      Console.WriteLine("--- Dia típico (reset em 84 h = 3,5 dias; usado 50; pela média daria 100)");
       Confere("sem histórico: fica na média", Vel(50, null).Projecao, 100);
-      Confere("com 1 h de histórico: ainda na média", Vel(50, H(50, 1, 49.5)).Projecao, 100);
-      // 48 h de histórico, subindo 10 pontos: 5 pts/dia. Em 84 h (3,5 dias) soma 17,5: 67,5.
-      Conta v48 = Vel(50, H(50, 48, 40));
-      Confere("48 h: velocidade em pts/dia", Cota.Inteiro(v48.VelDia), 5);
-      Confere("48 h: projeção só pela velocidade", v48.Projecao, 68);
-      Confere("48 h: a média continua guardada", v48.ProjecaoMedia, 100);
-      // 24 h subindo 5: peso 50%. Velocidade dá 67,5; média dá 100; meio a meio: 83,75.
-      Confere("24 h: meio a meio com a média", Vel(50, H(50, 24, 45)).Projecao, 84);
-      Confere("cor não muda com a velocidade", v48.Cor, "amarelo");
-      Confere("sem subir: projeção = usado", Vel(50, H(50, 48, 50)).Projecao, 50);
-      Confere("uso que cai não dá projeção menor que o usado", Vel(50, H(50, 48, 60)).Projecao, 50);
-      // 20 pts/dia a partir de 90: 100% em 0,5 dia, antes do reset.
-      Confere("avisa quando chega a 100% antes do reset", Vel(90, H(90, 48, 50)).DiasAte100, 0.5);
-      Confere("não avisa se não chega", Vel(50, H(50, 48, 40)).DiasAte100, -1);
-      List<Ponto> outraSemana = H(50, 48, 40);
-      foreach (Ponto p in outraSemana) p.Reset = p.Reset.AddDays(-7);
-      Confere("semana passada não conta", Vel(50, outraSemana).Projecao, 100);
+      Confere("só o dia de hoje: ainda na média", Vel(50, H(50, 1, 49.5)).Projecao, 100);
+      Conta d7 = Vel(50, Dias(5, 5, 5, 5, 5, 5, 5));
+      Confere("7 dias de 5 pts: dia típico", Cota.Inteiro(d7.VelDia), 5);
+      Confere("7 dias: projeção só pelo dia típico (50 + 17,5)", d7.Projecao, 68);
+      Confere("7 dias: a média continua guardada", d7.ProjecaoMedia, 100);
+      Confere("cor não muda com a velocidade", d7.Cor, "amarelo");
+      Confere("um dia de pico é ignorado", Cota.Inteiro(Vel(50, Dias(2, 2, 2, 40)).VelDia), 2);
+      Confere("com 2 dias ainda não ignora nada", Cota.Inteiro(Vel(50, Dias(4, 6)).VelDia), 5);
+      Confere("2 dias: pesa 2/7 sobre a média", Vel(50, Dias(4, 6)).Projecao, 91);
+      Confere("dias sem uso entram na conta", Vel(50, Dias(10, 0, 10, 0, 10, 0, 0)).VelDia.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture), "3.3");
+      Confere("sem uso: projeção = usado", Vel(50, Dias(0, 0, 0, 0, 0, 0, 0)).Projecao, 50);
+      Confere("avisa quando chega a 100% antes do reset", Vel(90, Dias(20, 20, 20, 20, 20, 20, 20)).DiasAte100, 0.5);
+      Confere("não avisa se não chega", d7.DiasAte100, -1);
+      List<Ponto> virou = Dias(5, 5, 5, 5, 5, 5, 5);
+      for (int i = 0; i < 4; i++) virou[i].Reset = virou[i].Reset.AddDays(-7);
+      Conta dv = Vel(50, virou);
+      Confere("aprendizado atravessa a semana", Cota.Inteiro(dv.VelDia) >= 5, true);
+      Confere("virada da semana não dá dia negativo", dv.VelDia >= 0, true);
+      List<Ponto> comHoje = Dias(5, 5, 5, 5, 5, 5, 5);
+      comHoje.Add(new Ponto { Lido = Agora.ToUnixTimeMilliseconds(), Usado = 99, Reset = comHoje[0].Reset });
+      Confere("hoje, pela metade, não entra", Cota.Inteiro(Vel(50, comHoje).VelDia), 5);
+
+      Console.WriteLine("--- Janela de 5 h");
+      Confere("plano sem 5 h: não aparece", V5(null, null).Tem5h, false);
+      Confere("reset já passou: não aparece", V5(L(40, -1, 1), null).Tem5h, false);
+      Conta m50 = V5(L(50, 3, 0), null);    // 2 h passadas, 25 pts/h: faltam 50, 2 h, reset em 3 h
+      Confere("sem histórico: usa a média da janela", Cota.Inteiro(m50.Vel5hHora), 25);
+      Confere("avisa quando acaba antes do reset", Cota.Inteiro(m50.Acaba5hMin), 120);
+      Confere("não avisa se não acaba", V5(L(40, 3, 0), null).Acaba5hMin, -1);
+      Conta r30 = V5(L(40, 3, 0), P5(10, 60, 3));   // subiu 30 na última hora
+      Confere("velocidade de agora vale mais que a média", Cota.Inteiro(r30.Vel5hHora), 30);
+      Confere("velocidade de agora prevê o fim", Cota.Inteiro(r30.Acaba5hMin), 120);
+      Confere("parou de usar: não prevê fim", V5(L(40, 3, 0), P5(40, 60, 3)).Acaba5hMin, -1);
+      Confere("pouco histórico: cai na média", Cota.Inteiro(V5(L(40, 3, 0), P5(39, 5, 3)).Vel5hHora), 20);
+      Confere("100%: esgotada", V5(L(100, 3, 0), null).Acaba5hMin, 0);
+      Confere("leitura de 40 min: velha", V5(L(40, 3, 40), null).Velha5h, true);
+      Confere("leitura velha: não prevê", V5(L(50, 3, 40), null).Acaba5hMin, -1);
+      Confere("texto do fim", Desenho.TextoAcaba5h(80), "acaba em 1 h 20");
+      string tmp5 = Path.Combine(Path.GetTempPath(), "cota-barra-teste-" + Guid.NewGuid().ToString("N") + ".json");
+      File.WriteAllText(tmp5, "{\"ultima:padrao\":{\"percentUsed\":18,\"resetsAt\":\"2026-11-09T19:00:00Z\",\"lido\":1793835996553},\"cinco_horas:padrao\":{\"percentUsed\":40,\"resetsAt\":\"2026-11-05T02:00:00Z\",\"lido\":1793835996553}}");
+      Confere("lê a janela de 5 h do arquivo", Cota.Contas(Agora, tmp5)[0].Uso5h, 40);
+      File.Delete(tmp5);
 
       Console.WriteLine("--- Cota real agora");
       foreach (Conta c in Cota.Contas())
@@ -142,7 +184,10 @@ namespace CotaBarra {
           foreach (bool claro in new[] { false, true })
             using (Bitmap b = Desenho.Cartao(casos[5], 1.5, new Aparencia { NomePaleta = pal, Claro = claro })) b.Save(Path.Combine(a[0], "cartao-" + pal + (claro ? "-claro" : "") + ".png"));
         using (Bitmap b = Desenho.Cartao(new[] { casos[2][0], casos[3][0], casos[4][0] }, 1.5, new Aparencia())) b.Save(Path.Combine(a[0], "cartao-estados.png"));
-        using (Bitmap b = Desenho.Cartao(new[] { Vel(50, H(50, 48, 40)), Vel(90, H(90, 48, 50)), Vel(50, H(50, 24, 45)), Vel(50, null) }, 1.5, new Aparencia())) b.Save(Path.Combine(a[0], "cartao-velocidade.png"));
+        Conta a5 = Vel(50, Dias(5, 5, 5, 5, 5, 5, 5)); Cota.Calcular5h(a5, L(50, 3, 0), Agora, null);
+        Conta b5 = Vel(90, Dias(20, 20, 20, 20, 20, 20, 20)); Cota.Calcular5h(b5, L(30, 4.5, 0), Agora, P5(25, 30, 4.5));
+        using (Bitmap b = Desenho.Cartao(new[] { a5, b5, Vel(50, Dias(4, 6)), Vel(50, null) }, 1.5, new Aparencia())) b.Save(Path.Combine(a[0], "cartao-velocidade.png"));
+        using (Bitmap b = Desenho.Pilula(new[] { a5, b5 }, 1.5, 60, false, new Aparencia { AlfaFundo = 245 })) b.Save(Path.Combine(a[0], "pilula-5h.png"));
       }
       Console.WriteLine();
       Console.WriteLine(falhas > 0 ? falhas + " FALHA(S)" : "Tudo confere.");

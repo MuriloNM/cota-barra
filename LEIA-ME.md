@@ -20,7 +20,8 @@ Também dá para fechar pelo botão direito. Para a pílula abrir com o Windows,
 
 - **Pílula:** C# em `src/`, compilado para `bin/pilula.exe` por `compilar.cmd`, com o compilador que já vem no Windows. Não instala nada. `bin/` não vai para o git: rode `compilar.cmd` depois de clonar.
 - **McAfee:** ele barra o `.exe` compilado como possível vírus, e a exceção no próprio McAfee parece valer só para aquele arquivo exato. O que funcionou depois de cada `compilar.cmd`: deixar o McAfee barrar, restaurar o arquivo da quarentena e manter `bin\pilula.exe` em Arquivos excluídos, nessa ordem, sem recompilar no meio.
-- **Velocidade:** cada leitura nova vai para `%LOCALAPPDATA%\cota-barra\historico.tsv` (21 dias). A velocidade olha as últimas 48 h da semana atual; a projeção mistura velocidade e média, com peso de 0 a 100% conforme o histórico chega a 48 h. A cor e o esperado seguem a fórmula do plugin.
+- **Semana:** cada leitura nova vai para `%LOCALAPPDATA%\cota-barra\historico.tsv` (56 dias). O dia típico é a média de pontos por dia, entre semanas, contando dias sem uso e ignorando o maior a partir de 3 dias. A projeção mistura dia típico e média da semana, com peso de 0 a 100% até 7 dias de histórico. A cor e o esperado seguem a fórmula do plugin.
+- **Janela de 5 h:** aparece só se o arquivo trouxer a chave `cinco_horas:<conta>`, com `percentUsed`, `resetsAt` e `lido`. A decisão é pela presença da janela, não pelo nome do plano. A velocidade é a da última hora; sem ela, a média desde o início da janela. **O plugin ainda não grava essa chave.**
 - **Reserva:** se o `.exe` não existir ou for barrado, `abrir-pilula.cmd` usa `pilula.ps1`, que tem o visual antigo.
 - **Fonte:** JetBrains Mono, se instalada; senão Cascadia Mono, depois Consolas.
 - **Bandeja:** PowerShell com WinForms (`bandeja.ps1`, `nucleo.ps1`).
