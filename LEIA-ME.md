@@ -9,16 +9,17 @@ Mostra a cota semanal do Claude fora do Claude, no Windows 11, numa janelinha co
 | Pílula (escolhida) | `abrir-pilula.cmd` | `fechar-pilula.cmd` |
 | Ícone na bandeja | `abrir-bandeja.cmd` | `fechar-bandeja.cmd` |
 
-Também dá para fechar pelo botão direito. Para a pílula abrir com o Windows, marque "Abrir com o Windows" no menu dela; desmarque para desligar. Vale só para o seu usuário. A bandeja não abre sozinha.
+Também dá para fechar pelo botão direito. Para a pílula abrir com o Windows, clique em "abrir com o windows" no painel dela; clique de novo para desligar. Vale só para o seu usuário. A bandeja não abre sozinha.
 
 ## Como usar
 
-- **Pílula:** clique alterna entre as duas contas e cada uma sozinha; arrastar muda o lugar; passar o mouse mostra o detalhe. O botão direito abre o menu: contas, monitor, tema (igual ao Windows, escuro, claro), tamanho (pequeno a grande), fundo (sólido, translúcido, transparente), fonte (as de largura fixa instaladas e a Segoe UI), voltar ao visual padrão (pequeno e transparente, a escolha do Murilo), esconder 30 min, posição automática, abrir com o Windows e fechar. Tudo fica salvo em `%LOCALAPPDATA%\cota-barra\pilula.json`.
+- **Pílula:** clique alterna entre as duas contas e cada uma sozinha; arrastar muda o lugar; passar o mouse abre o cartão de detalhe. O botão direito abre o painel de ajustes: contas, monitor, estilo (barras ou só texto), paleta (Tokyo Night, Catppuccin, Terminal), tema (igual ao Windows, escuro, claro), tamanho, fundo (sólido, translúcido, transparente), fonte (as de largura fixa instaladas e a Segoe UI), abrir com o Windows, visual padrão (pequeno, transparente e com barras), posição automática, esconder 30 min e fechar. Tudo fica salvo em `%LOCALAPPDATA%\cota-barra\pilula.json`.
 - **Bandeja:** um ícone por conta (Padrão = quadrado, Trabalho = círculo). O Windows põe ícones novos na área oculta (`^`): arraste os dois para a barra.
 
 ## Como é feita
 
 - **Pílula:** C# em `src/`, compilado para `bin/pilula.exe` por `compilar.cmd`, com o compilador que já vem no Windows. Não instala nada. `bin/` não vai para o git: rode `compilar.cmd` depois de clonar.
+- **McAfee:** ele barra o `.exe` compilado como possível vírus, e a exceção no próprio McAfee parece valer só para aquele arquivo exato. Cada `compilar.cmd` pede refazer a exceção: remover a antiga e adicionar `bin\pilula.exe` antes de abrir.
 - **Reserva:** se o `.exe` não existir ou for barrado, `abrir-pilula.cmd` usa `pilula.ps1`, que tem o visual antigo.
 - **Fonte:** JetBrains Mono, se instalada; senão Cascadia Mono, depois Consolas.
 - **Bandeja:** PowerShell com WinForms (`bandeja.ps1`, `nucleo.ps1`).
