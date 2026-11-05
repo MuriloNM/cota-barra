@@ -251,7 +251,8 @@ namespace CotaBarra {
     Aplicacao(EventWaitHandle sinal) {
       sinalFechar = sinal;
       LerConfig();
-      Historico.Carregar(Path.Combine(Pasta, "historico.tsv"), DateTimeOffset.Now);
+      if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("COTA_ARQUIVO")))   // dado de teste não entra no histórico
+        Historico.Carregar(Path.Combine(Pasta, "historico.tsv"), DateTimeOffset.Now);
       forma.MouseEnter += delegate { MostrarCartao(); };
       forma.MouseLeave += delegate { EsconderCartao(); };
       forma.MouseDown += AoPressionar;

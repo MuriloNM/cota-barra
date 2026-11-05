@@ -173,6 +173,8 @@ namespace CotaBarra {
     // O nome do arquivo muda de instalação para instalação: vale o mais recente.
     public static string Arquivo() {
       try {
+        string teste = Environment.GetEnvironmentVariable("COTA_ARQUIVO");   // só para testar com um arquivo de exemplo
+        if (!string.IsNullOrEmpty(teste)) return teste;
         string pasta = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), @".claude\plugins\store");
         string melhor = null; DateTime data = DateTime.MinValue;
         foreach (string f in Directory.GetFiles(pasta, "cota_inline-*.json")) {
