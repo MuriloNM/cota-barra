@@ -129,7 +129,8 @@ namespace CotaBarra {
   }
 
   class Chip { public string Texto; public Func<bool> Ativo; public Action Acao; public bool Perigo; public Rectangle R; }
-  class Secao { public string Titulo; public List<Chip> Chips = new List<Chip>(); }
+  // Grupo: linha de cabeçalho antes da seção, com a largura toda (o nome da conta, por exemplo).
+  class Secao { public string Titulo, Grupo; public int YGrupo; public List<Chip> Chips = new List<Chip>(); }
 
   // Painel de ajustes no lugar do menu branco do Windows. Cada clique vale na hora; clicar fora ou Esc fecha.
   class PainelAjustes : Form {
@@ -157,6 +158,7 @@ namespace CotaBarra {
       int largura = D(470), xChips = D(96), pad = D(14), alturaChip = D(26), vaoChip = D(6), y = D(44);
       using (Font f = Fonte(FontStyle.Regular, 12.5)) using (Graphics g = CreateGraphics()) {
         foreach (Secao s in secoes) {
+          if (s.Grupo != null) { y += D(6); s.YGrupo = y; y += D(24); }
           int x = xChips;
           foreach (Chip c in s.Chips) {
             int w = TextRenderer.MeasureText(g, c.Texto, f, Size.Empty, TextFormatFlags.NoPadding).Width + D(18);
@@ -190,6 +192,11 @@ namespace CotaBarra {
         string esq = "esc fecha";
         g.DrawString(esq, fN, bW, ClientSize.Width - D(14) - g.MeasureString(esq, fN).Width, D(12));
         foreach (Secao s in secoes) {
+          if (s.Grupo != null) {
+            g.DrawString(s.Grupo, fN, bX, D(14), s.YGrupo);
+            float wg = g.MeasureString(s.Grupo, fN).Width + D(20);
+            using (Pen linha = new Pen(Color.FromArgb(70, p.Fraco))) g.DrawLine(linha, D(14) + wg, s.YGrupo + D(10), ClientSize.Width - D(14), s.YGrupo + D(10));
+          }
           if (s.Chips.Count == 0) continue;
           g.DrawString(s.Titulo, fN, bW, D(14), s.Chips[0].R.Y + D(4));
           foreach (Chip c in s.Chips) {
@@ -383,14 +390,14 @@ namespace CotaBarra {
       foreach (Conta c in contas) {
         if (string.IsNullOrEmpty(c.Nome)) continue;
         string nome = c.Nome, rot = c.Rotulo.ToLowerInvariant();
-        Secao sd = new Secao { Titulo = "dias que contam · " + rot };
+        Secao sd = new Secao { Titulo = "dias", Grupo = "conta " + rot + ": dias que contam" };
         foreach (int dia in new[] { 1, 2, 3, 4, 5, 6, 0 }) {
           int k = dia;
           sd.Chips.Add(new Chip { Texto = Dias.Nomes[k], Ativo = () => DiasConta(nome).Semana[k], Acao = delegate { AlternarDia(nome, k); } });
         }
         l.Add(sd);
         if (c.ResetEm == default(DateTimeOffset)) continue;
-        Secao sf = new Secao { Titulo = "folga nesta semana · " + rot };
+        Secao sf = new Secao { Titulo = "folga" };
         DateTime ini = c.ResetEm.AddDays(-7).ToLocalTime().Date, fim = c.ResetEm.ToLocalTime().DateTime;
         for (DateTime dt = ini; dt < fim; dt = dt.AddDays(1)) {
           DateTime k = dt;
@@ -399,7 +406,9 @@ namespace CotaBarra {
         }
         if (sf.Chips.Count > 0) l.Add(sf);
       }
-      l.Add(MontarMonitores());
+      Secao monitores = MontarMonitores();
+      monitores.Grupo = "aparência";
+      l.Add(monitores);
       l.Add(Grupo("estilo", () => estilo, v => estilo = v, "barras", "barras", "texto", "só texto"));
       l.Add(Grupo("paleta", () => paleta, v => paleta = v, "tokyo", "tokyo night", "catppuccin", "catppuccin", "terminal", "terminal"));
       // Ao escolher, a onda passa na hora, para mostrar como fica.
