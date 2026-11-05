@@ -3,7 +3,7 @@
 
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 
-$script:ArquivoCota    = Join-Path $env:USERPROFILE '.claude\plugins\store\cota_inline-633892c87774.json'
+$script:ArquivoCota    = Get-ChildItem (Join-Path $env:USERPROFILE '.claude\plugins\store') -Filter 'cota_*.json' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1 -ExpandProperty FullName
 $script:PastaEstado    = Join-Path $env:LOCALAPPDATA 'cota-barra'
 $script:SemanaMs       = 604800000.0
 $script:VelhaDepoisMin = 120      # leitura com mais de 2 h aparece como velha

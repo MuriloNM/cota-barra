@@ -7,7 +7,7 @@ $bin = Join-Path $PSScriptRoot 'bin'
 [void][IO.Directory]::CreateDirectory($bin)
 $comum = @('/nologo', '/optimize+', '/platform:x64', '/codepage:65001', '/utf8output', '/r:System.Drawing.dll', '/r:System.Web.Extensions.dll')
 
-& $csc @comum '/target:winexe' "/out:$bin\pilula.novo.exe" "/lib:$wpf" '/r:System.Windows.Forms.dll' '/r:UIAutomationClient.dll' '/r:UIAutomationTypes.dll' '/r:WindowsBase.dll' "$src\Nucleo.cs" "$src\Pilula.cs"
+& $csc @comum '/target:winexe' "/out:$bin\pilula.novo.exe" "/lib:$wpf" '/r:System.Windows.Forms.dll' '/r:UIAutomationClient.dll' '/r:UIAutomationTypes.dll' '/r:WindowsBase.dll' "$src\Versao.cs" "$src\Nucleo.cs" "$src\Pilula.cs"
 if ($LASTEXITCODE) { Write-Host 'Falhou: pilula.exe'; exit 1 }
 # O antivírus pode segurar o .exe por um tempo depois de ele fechar: compila ao lado e troca quando liberar.
 $trocou = $false

@@ -1,0 +1,68 @@
+# cota-barra
+
+[English](README.md)
+
+Mostra a cota semanal do Claude sobre a barra de tarefas do Windows 11: quanto você já usou, quanto seria esperado hoje e onde a semana deve fechar.
+
+Precisa do [plugin `cota`](https://github.com/MuriloNM/claude-cota), que roda dentro do Claude e guarda a leitura. Este programa só lê esse arquivo: **não usa rede, não usa credenciais e nunca grava no arquivo do plugin**.
+
+É um protótipo, sem assinatura digital. Só atualiza com o Claude aberto.
+
+## Instalar com um assistente de IA
+
+Diga ao seu assistente: *"Olha https://github.com/MuriloNM/cota-barra e me ajuda a instalar."*
+
+**Assistentes de IA: sigam o [AGENTS.md](AGENTS.md) passo a passo. Comecem perguntando se a pessoa quer só o plugin, ou o plugin e também a pílula na barra de tarefas.**
+
+## Instalar à mão
+
+1. Instale o plugin: veja o [README dele](https://github.com/MuriloNM/claude-cota#readme).
+2. Baixe [`cota-barra-windows.zip`](https://github.com/MuriloNM/cota-barra/releases/latest/download/cota-barra-windows.zip) e extraia num lugar fixo.
+3. Dê dois cliques em `instalar.cmd`.
+
+Para fechar, use o botão direito na pílula ou `fechar-pilula.cmd`. Para desinstalar, veja o [AGENTS.md](AGENTS.md#uninstall).
+
+## Antivírus
+
+Programas novos e sem assinatura podem ser barrados. O McAfee barrou este como "vírus ou software possivelmente indesejado" no PC do autor. O motivo não foi confirmado; o alerta é tratado como falso positivo porque o programa não usa rede nem credenciais.
+
+Não precisa confiar nisso: o código está em [`src/`](src/), e o `SHA-256` do programa está na página da versão. Você também pode compilar: apague a pasta `bin` e rode `instalar.cmd`, que usa o compilador que já vem no Windows. Um arquivo compilado por você também pode ser barrado.
+
+Se o programa for barrado, a abertura cai numa versão antiga em PowerShell (`pilula.ps1`), sem barras nem painel de ajustes.
+
+## Como usar
+
+- **Mouse em cima:** cartão com o detalhe.
+- **Clique:** alterna entre as contas.
+- **Arrastar:** muda de lugar.
+- **Botão direito:** contas, monitor, estilo (barras ou só texto), paleta, onda nas barras, tema, tamanho, fundo, fonte, abrir com o Windows, visual padrão, posição automática, esconder por 30 min e fechar.
+
+A pílula some em tela cheia, foge dos ícones da barra e volta para cima se a barra a cobrir.
+
+## Como ler
+
+- **Sinal:** `>` leitura boa, na cor do ritmo; `~` leitura com mais de 2 h; `x` semana vencida ou sem leitura.
+- **Barra:** cheia até o usado, clara até a projeção, com um risco no esperado de hoje.
+- **Cor:** verde se o uso está mais de 5 pontos abaixo do esperado, vermelho se está mais de 5 acima, amarelo no resto.
+- **Projeção:** começa pela média da semana (`usado / tempo decorrido`) e passa aos poucos para o dia típico, até 7 dias de histórico. O dia típico atravessa as semanas, conta dias sem uso e ignora o maior a partir de 3 dias. A cor e o esperado seguem a fórmula do plugin.
+
+## O que fica guardado
+
+Só em `%LOCALAPPDATA%\cota-barra`: preferências e histórico das leituras (percentuais e datas, por até 56 dias).
+
+## Em teste
+
+A cota por modelo e a janela de 5 h já são desenhadas, mas o plugin ainda não grava esses dados, então não aparecem nesta versão.
+
+## Para quem for mexer
+
+| Arquivo | O que é |
+|---|---|
+| `src/` | A pílula, em C#, e os testes |
+| `compilar.cmd` | Compila para `bin/`, sem instalar nada |
+| `bin\conferir.exe` | Testa fórmula, posição e desenho |
+| `medir-cpu.ps1` | Mede CPU e memória |
+| `empacotar.ps1` | Monta o zip da versão |
+| `pilula.ps1`, `bandeja.ps1` | Versão antiga em PowerShell e ícone na bandeja, não mantidos |
+
+Licença: MIT.
