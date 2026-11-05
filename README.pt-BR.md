@@ -38,6 +38,17 @@ Diga ao seu assistente: *"Olha https://github.com/MuriloNM/cota-barra e me ajuda
 
 Para fechar, use o botão direito na pílula ou `fechar-pilula.cmd`. Para desinstalar, veja o [AGENTS.md](AGENTS.md#uninstall).
 
+## Uma segunda conta, como a de trabalho
+
+Dá para deixar duas contas abertas lado a lado, cada uma com seu login, suas conversas e sua cota. Use os arquivos de [`segunda-conta/`](segunda-conta/):
+
+- **`Claude Segunda Conta.vbs`:** dois cliques abrem uma cópia separada do Claude Desktop, sem janela de terminal.
+- **`Claude Segunda Conta.bat`:** faz o mesmo e mostra o erro, se algo der errado.
+
+Na primeira vez, entre com a outra conta e mande uma mensagem, para gerar a primeira leitura; aí a pílula mostra as duas contas. Os dados dessa cópia ficam em `%USERPROFILE%\ClaudePerfis\Trabalho`. Abra essa conta sempre por esses arquivos: são eles que dizem ao plugin qual é a conta.
+
+A conta se chama `Trabalho` por padrão. Para mudar, edite o nome no começo dos dois arquivos.
+
 ## Antivírus
 
 Programas novos e sem assinatura podem ser barrados. O McAfee barrou este como "vírus ou software possivelmente indesejado" no PC do autor. O motivo não foi confirmado; o alerta é tratado como falso positivo porque o programa não usa rede nem credenciais.

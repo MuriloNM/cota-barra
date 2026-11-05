@@ -46,6 +46,17 @@ Reply in the person's language. Do not propose a plan or recommend an option bef
 
 To close it, right-click the pill, or run `fechar-pilula.cmd`. To uninstall, see [AGENTS.md](AGENTS.md#uninstall).
 
+## A second account, like a work one
+
+You can keep two accounts open side by side, each with its own login, conversations and quota. Use the files in [`segunda-conta/`](segunda-conta/):
+
+- **`Claude Segunda Conta.vbs`:** double-click it to open a separate copy of Claude Desktop, with no terminal window.
+- **`Claude Segunda Conta.bat`:** does the same and shows the error if something goes wrong.
+
+The first time, sign in with the other account and send a message, so the first reading exists; the pill then shows both accounts. This copy's data stays in `%USERPROFILE%\ClaudePerfis\Trabalho`. Always open that account through these files: they tell the plugin which account it is.
+
+The account is called `Trabalho` by default. To change it, edit the name at the top of both files.
+
 ## Antivirus
 
 New, unsigned programs can get blocked. McAfee flagged this one as a "virus or potentially unwanted program" on the author's PC. The cause is unconfirmed; it is treated as a false positive because the program uses no network and no credentials.

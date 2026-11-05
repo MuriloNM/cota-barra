@@ -63,6 +63,10 @@ Get-Process pilula
 
 Tell the person: right-click opens the settings; hovering shows the details; the number only updates while Claude is open; the interface is in Brazilian Portuguese.
 
+## Optional: a second account
+
+Only if the person mentions a second account, such as a work one: tell them to double-click `segunda-conta\Claude Segunda Conta.vbs` in the extracted folder, sign in with that account and send a message. Always opening that account through this file keeps each account's quota apart. If it fails, `Claude Segunda Conta.bat` shows the error. Do not open it for them unless they ask.
+
 ## Antivirus
 
 The program is new and unsigned, so an antivirus may block it. McAfee did on the author's PC; the cause is unconfirmed and it is treated as a false positive. Explain this honestly, and that the source is in `src/`.
