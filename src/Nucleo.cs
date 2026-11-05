@@ -172,12 +172,18 @@ namespace CotaBarra {
 
     // O nome do arquivo muda de instalação para instalação: vale o mais recente.
     public static string Arquivo() {
+      string teste = Environment.GetEnvironmentVariable("COTA_ARQUIVO");   // só para testar com um arquivo de exemplo
+      return !string.IsNullOrEmpty(teste) ? teste : MaisRecente("cota_inline-*.json");
+    }
+    // A janela de 5 h pode vir de um arquivo à parte, gravado pelo mod de teste. Só lido.
+    static string Arquivo5h() {
+      return !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("COTA_ARQUIVO")) ? null : MaisRecente("cota-5h_*.json");
+    }
+    static string MaisRecente(string padrao) {
       try {
-        string teste = Environment.GetEnvironmentVariable("COTA_ARQUIVO");   // só para testar com um arquivo de exemplo
-        if (!string.IsNullOrEmpty(teste)) return teste;
         string pasta = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), @".claude\plugins\store");
         string melhor = null; DateTime data = DateTime.MinValue;
-        foreach (string f in Directory.GetFiles(pasta, "cota_inline-*.json")) {
+        foreach (string f in Directory.GetFiles(pasta, padrao)) {
           DateTime d = File.GetLastWriteTimeUtc(f);
           if (d > data) { data = d; melhor = f; }
         }
@@ -244,18 +250,21 @@ namespace CotaBarra {
     }
 
     // Lê sem bloquear quem grava. Só relê quando a data muda; se vier quebrado, mantém o último bom.
-    static string cacheCaminho; static DateTime cacheData; static Dictionary<string, object> cacheJson;
+    class Cache { public DateTime Data; public Dictionary<string, object> Json; }
+    static readonly Dictionary<string, Cache> caches = new Dictionary<string, Cache>();
     static Dictionary<string, object> LerArquivo(string caminho) {
+      Cache cache;
+      if (!caches.TryGetValue(caminho, out cache)) { cache = new Cache(); caches[caminho] = cache; }
       try {
         DateTime data = File.GetLastWriteTimeUtc(caminho);
-        if (caminho == cacheCaminho && data == cacheData && cacheJson != null) return cacheJson;
+        if (data == cache.Data && cache.Json != null) return cache.Json;
         string texto;
         using (FileStream fs = new FileStream(caminho, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
         using (StreamReader sr = new StreamReader(fs, System.Text.Encoding.UTF8)) texto = sr.ReadToEnd();
         Dictionary<string, object> json = new JavaScriptSerializer().DeserializeObject(texto) as Dictionary<string, object>;
-        if (json != null) { cacheJson = json; cacheData = data; cacheCaminho = caminho; }
+        if (json != null) { cache.Json = json; cache.Data = data; }
       } catch { }
-      return caminho == cacheCaminho ? cacheJson : null;
+      return cache.Json;
     }
 
     static Leitura Extrair(Dictionary<string, object> json, string chave) {
@@ -287,6 +296,10 @@ namespace CotaBarra {
         Conta c = Calcular(l, RotuloDe(n), agora, usarHistorico ? Historico.De(n) : null);
         // Janela de 5 h, se o arquivo trouxer. Quem não tem essa janela no plano segue só com a semana.
         Leitura l5 = Extrair(json, "cinco_horas:" + n);
+        if (l5 == null && usarHistorico) {
+          string a5 = Arquivo5h();
+          if (a5 != null) l5 = Extrair(LerArquivo(a5), "cinco_horas:" + n);
+        }
         if (usarHistorico) Historico.Registrar(n + "#5h", l5);
         Calcular5h(c, l5, agora, usarHistorico ? Historico.De(n + "#5h") : null);
         lista.Add(c);
