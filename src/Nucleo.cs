@@ -414,7 +414,7 @@ namespace CotaBarra {
 
     // Barra em células: cheia até o usado, apagada até a projeção, trilha no resto e um risco no esperado de hoje.
     public const float SemOnda = -9f;
-    const float LarguraOnda = 0.22f, ForcaOnda = 0.55f;   // sutil: menos de 1/4 da barra, sem chegar à cor pura
+    const float MeioOnda = 2f, BordaOnda = 2f, ForcaOnda = 0.90f;   // 5 células fortes de uma vez, mais 2 se apagando de cada lado
     static Color Misturar(Color a, Color b, float k) {
       return Color.FromArgb(a.A, (int)(a.R + (b.R - a.R) * k), (int)(a.G + (b.G - a.G) * k), (int)(a.B + (b.B - a.B) * k));
     }
@@ -430,11 +430,11 @@ namespace CotaBarra {
       for (int i = 0; i < n; i++) {
         Color base1 = i < cheias ? cor : i < proj ? cProj : trilha;
         if (onda != SemOnda) {
-          float d = Math.Abs((n > 1 ? i / (float)(n - 1) : 0) - onda);
-          if (d < LarguraOnda) {
-            float k = 1 - d / LarguraOnda;   // suave nas pontas da onda
-            base1 = Misturar(base1, corOnda, k * k * ForcaOnda);
-            base1 = Color.FromArgb(Math.Max((int)base1.A, (int)(120 * k)), base1);   // as células apagadas também acendem um pouco
+          float d = Math.Abs(i - onda * (n - 1));   // distância em células, para valer igual em qualquer barra
+          if (d < MeioOnda + BordaOnda) {
+            float k = d <= MeioOnda ? 1 : 1 - (d - MeioOnda) / BordaOnda;
+            base1 = Misturar(base1, corOnda, k * ForcaOnda);
+            base1 = Color.FromArgb(Math.Max((int)base1.A, (int)(230 * k)), base1);   // as células apagadas também acendem
           }
         }
         using (SolidBrush b = new SolidBrush(base1)) g.FillRectangle(b, x + i * (cel + vao), y, cel, alto);

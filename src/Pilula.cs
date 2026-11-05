@@ -286,7 +286,7 @@ namespace CotaBarra {
     void IniciarOnda() {
       int seg;
       if (!int.TryParse(onda, out seg) || seg <= 0) { proximaOnda = DateTime.MaxValue; return; }
-      proximaOnda = DateTime.Now.AddSeconds(seg);
+      proximaOnda = DateTime.Now.AddSeconds(seg - 1);   // o relógio bate a cada 5 s: sem essa folga, 5 s virariam 10 s
       if (timerOnda.Enabled || arrastando || !visivel || estilo == "texto" || ultimoCompacto) return;
       inicioOnda = DateTime.Now;
       timerOnda.Start();
@@ -343,7 +343,7 @@ namespace CotaBarra {
       l.Add(Grupo("estilo", () => estilo, v => estilo = v, "barras", "barras", "texto", "só texto"));
       l.Add(Grupo("paleta", () => paleta, v => paleta = v, "tokyo", "tokyo night", "catppuccin", "catppuccin", "terminal", "terminal"));
       // Ao escolher, a onda passa na hora, para mostrar como fica.
-      l.Add(Grupo("onda", () => onda, v => { onda = v; proximaOnda = DateTime.MinValue; IniciarOnda(); }, "0", "desligada", "30", "30 s", "60", "1 min", "300", "5 min", "900", "15 min"));
+      l.Add(Grupo("onda", () => onda, v => { onda = v; proximaOnda = DateTime.MinValue; IniciarOnda(); }, "0", "desligada", "5", "5 s", "10", "10 s", "15", "15 s", "30", "30 s", "60", "1 min", "300", "5 min", "900", "15 min"));
       l.Add(Grupo("tema", () => tema, v => tema = v, "auto", "igual ao windows", "escuro", "escuro", "claro", "claro"));
       l.Add(Grupo("tamanho", () => tamanho, v => tamanho = v, "pequena", "p", "media", "m", "normal", "g", "grande", "gg"));
       l.Add(Grupo("fundo", () => fundo, v => fundo = v, "opaco", "sólido", "translucido", "translúcido", "transparente", "transparente"));
