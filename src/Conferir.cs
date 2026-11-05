@@ -61,6 +61,22 @@ namespace CotaBarra {
       Confere("manual sobre os ícones é ignorada", Rastro(1322, 2518, 1500), "direita 3013");
       Confere("sem dados dos ícones: ainda respeita a bandeja", Rastro(null, null, null), "direita 3013");
 
+      Console.WriteLine("--- Aparência");
+      List<Conta> duas = new List<Conta> { C(18, 115, 3), C(100, 10, 28) };
+      using (Bitmap pq = Desenho.Pilula(duas, 1.5, 60, false, new Aparencia { Letra = 10 }))
+      using (Bitmap gr = Desenho.Pilula(duas, 1.5, 60, false, new Aparencia { Letra = 13.5 })) {
+        Confere("letra menor deixa a pílula mais estreita", pq.Width < gr.Width, true);
+        Confere("letra menor deixa a pílula mais baixa", pq.Height < gr.Height, true);
+        Confere("nunca passa da altura da barra", gr.Height <= 60, true);
+      }
+      Confere("fonte que não existe cai numa instalada", Desenho.FonteMono("Fonte Que Nao Existe") != "Fonte Que Nao Existe", true);
+      List<string> fontes = Desenho.FontesMono();
+      Console.WriteLine("fontes no menu: " + string.Join(", ", fontes));
+      Confere("lista de fontes não traz símbolos", fontes.Contains("Marlett") || fontes.Contains("Wingdings 2"), false);
+      Confere("lista de fontes não traz variações de peso", fontes.Contains("JetBrains Mono Light"), false);
+      using (Bitmap t = Desenho.Pilula(duas, 1.5, 60, false, new Aparencia { AlfaFundo = 1 }))
+        Confere("fundo transparente ainda recebe o mouse", t.GetPixel(t.Width - 8, t.Height / 2).A > 0, true);
+
       Console.WriteLine("--- Cota real agora");
       foreach (Conta c in Cota.Contas())
         Console.WriteLine(c.Rotulo + ": " + c.Estado + " " + c.Cor + " " + c.Usado + "% / " + c.Esperado + "% -> " + c.Projecao + "% (" + c.Idade + ")");
@@ -73,8 +89,8 @@ namespace CotaBarra {
           new[] { Cota.Calcular(null, "Trabalho", Agora) }, new[] { v, t }
         };
         for (int i = 0; i < casos.Length; i++)
-          using (Bitmap b = Desenho.Pilula(casos[i], 1.5, 60, false)) b.Save(Path.Combine(a[0], "exe-" + i + ".png"));
-        using (Bitmap b = Desenho.Pilula(casos[5], 1.5, 60, true)) b.Save(Path.Combine(a[0], "exe-compacta.png"));
+          using (Bitmap b = Desenho.Pilula(casos[i], 1.5, 60, false, new Aparencia())) b.Save(Path.Combine(a[0], "exe-" + i + ".png"));
+        using (Bitmap b = Desenho.Pilula(casos[5], 1.5, 60, true, new Aparencia())) b.Save(Path.Combine(a[0], "exe-compacta.png"));
       }
       Console.WriteLine();
       Console.WriteLine(falhas > 0 ? falhas + " FALHA(S)" : "Tudo confere.");

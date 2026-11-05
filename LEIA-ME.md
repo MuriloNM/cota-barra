@@ -13,7 +13,7 @@ Também dá para fechar pelo botão direito. Nada abre sozinho com o Windows.
 
 ## Como usar
 
-- **Pílula:** clique alterna entre as duas contas e cada uma sozinha; arrastar muda o lugar; botão direito abre o menu (contas, esconder 30 min, posição automática, fechar). Passar o mouse mostra o detalhe.
+- **Pílula:** clique alterna entre as duas contas e cada uma sozinha; arrastar muda o lugar; passar o mouse mostra o detalhe. O botão direito abre o menu: contas, monitor, tema (igual ao Windows, escuro, claro), tamanho (pequeno a grande), fundo (sólido, translúcido, transparente), fonte (as de largura fixa instaladas e a Segoe UI), voltar ao visual padrão, esconder 30 min, posição automática e fechar. Tudo fica salvo em `%LOCALAPPDATA%\cota-barra\pilula.json`.
 - **Bandeja:** um ícone por conta (Padrão = quadrado, Trabalho = círculo). O Windows põe ícones novos na área oculta (`^`): arraste os dois para a barra.
 
 ## Como é feita
@@ -33,10 +33,11 @@ Também dá para fechar pelo botão direito. Nada abre sozinho com o Windows.
 
 - **Barra por cima:** volta ao topo quando a janela em primeiro plano muda e a cada 5 s.
 - **Ícones:** procura espaço à esquerda da bandeja; se os ícones crescerem, passa para a direita dos widgets; sem espaço, encolhe para só os percentuais. Soltar em cima dos ícones é recusado.
-- **Tela cheia:** some enquanto uma janela em tela cheia estiver em primeiro plano no monitor principal.
+- **Tela cheia:** some enquanto uma janela em tela cheia estiver em primeiro plano no monitor da pílula.
 - **Barra oculta automaticamente:** some junto (não testado: exigiria mudar a configuração do Windows).
+- **Monitores:** o menu lista os monitores que o Windows enxerga, e o que não tem barra de tarefas fica desabilitado. Se o escolhido for desconectado, a pílula vai para o principal e volta quando ele reconectar. Trocar de monitor zera a posição arrastada.
 
-Limites: fica só no monitor principal; só atualiza enquanto o Claude grava o arquivo. É sempre escura, mesmo no tema claro do Windows.
+Limites: só atualiza enquanto o Claude grava o arquivo. Tema claro com fundo transparente sobre barra escura fica ilegível: a escolha é sua.
 
 ## Conferir e medir
 

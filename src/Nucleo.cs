@@ -8,10 +8,14 @@ using System.Drawing.Imaging;
 using System.Drawing.Text;
 using System.Globalization;
 using System.IO;
+using System.Text.RegularExpressions;
 using System.Web.Script.Serialization;
 
 namespace CotaBarra {
   public class Leitura { public double? Usado; public string ResetsAt; public long? Lido; }
+
+  // Como a pílula é desenhada. AlfaFundo 1 = transparente, mas ainda recebe o mouse (com 0 o clique atravessaria).
+  public class Aparencia { public string Fonte = "JetBrains Mono"; public double Letra = 12; public int AlfaFundo = 245; public bool Claro; }
 
   public class Conta {
     public string Rotulo, Estado = "sem", Cor = "cinza", Idade = "", Detalhe;   // Estado: ok | velha | vencida | sem
@@ -123,11 +127,11 @@ namespace CotaBarra {
   }
 
   public static class Desenho {
-    static Color CorDe(string c) {
+    static Color CorDe(string c, bool claro) {
       switch (c) {
-        case "verde": return Color.FromArgb(63, 185, 80);
-        case "amarelo": return Color.FromArgb(227, 179, 65);
-        case "vermelho": return Color.FromArgb(248, 81, 73);
+        case "verde": return claro ? Color.FromArgb(22, 128, 57) : Color.FromArgb(63, 185, 80);
+        case "amarelo": return claro ? Color.FromArgb(154, 103, 0) : Color.FromArgb(227, 179, 65);
+        case "vermelho": return claro ? Color.FromArgb(207, 34, 46) : Color.FromArgb(248, 81, 73);
         default: return Color.FromArgb(140, 140, 140);
       }
     }
@@ -147,11 +151,29 @@ namespace CotaBarra {
       return s;
     }
     // A primeira fonte instalada da lista. new Font() trocaria em silêncio por uma sem serifa.
-    static string FonteMono() {
-      foreach (string nome in new[] { "JetBrains Mono", "Cascadia Mono", "Consolas" }) {
+    public static string FonteMono(string preferida) {
+      foreach (string nome in new[] { preferida, "JetBrains Mono", "Cascadia Mono", "Consolas" }) {
+        if (string.IsNullOrEmpty(nome)) continue;
         try { using (FontFamily f = new FontFamily(nome)) return f.Name; } catch (ArgumentException) { }
       }
       return FontFamily.GenericMonospace.Name;
+    }
+    // Fontes de largura fixa instaladas, sem variações de peso nem fontes de símbolos ou só de CJK.
+    public static List<string> FontesMono() {
+      Regex fora = new Regex(@"(ExtraLight|SemiLight|Light|Medium|SemiBold|ExtraBold|Thin|Black)$|Marlett|MT Extra|Outlook|Icons|MDL2|Wingdings|Webdings|Symbol|MingLiU|SimSun|Gothic|Holo", RegexOptions.IgnoreCase);
+      List<string> lista = new List<string>();
+      using (InstalledFontCollection fontes = new InstalledFontCollection())
+      using (Bitmap b = new Bitmap(1, 1)) using (Graphics g = Graphics.FromImage(b)) {
+        foreach (FontFamily fam in fontes.Families) {
+          if (fora.IsMatch(fam.Name) || !fam.IsStyleAvailable(FontStyle.Regular)) continue;
+          using (Font f = new Font(fam, 20, FontStyle.Regular, GraphicsUnit.Pixel)) {
+            float i = g.MeasureString("iiiiiiii", f, 4000, StringFormat.GenericTypographic).Width;
+            float w = g.MeasureString("WWWWWWWW", f, 4000, StringFormat.GenericTypographic).Width;
+            if (Math.Abs(i - w) < 1) lista.Add(fam.Name);
+          }
+        }
+      }
+      return lista;
     }
     // O sinal no lugar do prompt: > leitura boa, ~ leitura velha, x sem número válido.
     static string Prompt(Conta c) { return c.Estado == "ok" ? ">" : c.Estado == "velha" ? "~" : "x"; }
@@ -160,15 +182,15 @@ namespace CotaBarra {
     }
 
     // Visual de terminal: sempre escuro, cantos quase retos, fonte mono, prompt e número na cor do ritmo.
-    public static Bitmap Pilula(IList<Conta> lista, double esc, int altura, bool compacto) {
-      bool duas = lista.Count > 1;
-      Color fundo = Color.FromArgb(245, 12, 12, 12);
-      Color borda = Color.FromArgb(70, 255, 255, 255);
-      Color forte = Color.FromArgb(225, 225, 225);
-      Color fraco = Color.FromArgb(140, 140, 140);
-      Color alerta = Color.FromArgb(240, 170, 70);
-      float px = (float)((duas ? 12 : 14) * esc);
-      string fonte = FonteMono();
+    public static Bitmap Pilula(IList<Conta> lista, double esc, int alturaMax, bool compacto, Aparencia a) {
+      bool duas = lista.Count > 1, claro = a.Claro;
+      Color fundo = claro ? Color.FromArgb(a.AlfaFundo, 245, 245, 243) : Color.FromArgb(a.AlfaFundo, 12, 12, 12);
+      Color borda = claro ? Color.FromArgb(70, 0, 0, 0) : Color.FromArgb(70, 255, 255, 255);
+      Color forte = claro ? Color.FromArgb(30, 30, 30) : Color.FromArgb(225, 225, 225);
+      Color fraco = claro ? Color.FromArgb(95, 95, 95) : Color.FromArgb(140, 140, 140);
+      Color alerta = claro ? Color.FromArgb(170, 95, 0) : Color.FromArgb(240, 170, 70);
+      float px = (float)((duas ? a.Letra : a.Letra + 2) * esc);
+      string fonte = FonteMono(a.Fonte);
 
       using (Font fNormal = new Font(fonte, px, FontStyle.Regular, GraphicsUnit.Pixel))
       using (Font fForte = new Font(fonte, px, FontStyle.Bold, GraphicsUnit.Pixel))
@@ -185,8 +207,12 @@ namespace CotaBarra {
             wIdade = Math.Max(wIdade, Medir(gm, s.Idade, fNormal, fmt));
           }
         }
-        int pad = (int)(9 * esc), vao = (int)(6 * esc), wPrompt;
-        using (Bitmap med = new Bitmap(1, 1)) using (Graphics gm = Graphics.FromImage(med)) wPrompt = Medir(gm, ">", fForte, fmt);
+        int pad = (int)(9 * esc), vao = (int)(6 * esc), wPrompt, altura;
+        using (Bitmap med = new Bitmap(1, 1)) using (Graphics gm = Graphics.FromImage(med)) {
+          wPrompt = Medir(gm, ">", fForte, fmt);
+          // A altura acompanha a letra, sem passar do que cabe na barra.
+          altura = Math.Min(alturaMax, (int)Math.Ceiling(fNormal.GetHeight(gm) * linhas.Count + 2 * (int)(4 * esc)));
+        }
         int x1 = pad + wPrompt + vao;
         int x2 = x1 + (wRot > 0 ? wRot + vao : 0);
         int x3 = x2 + wUso + (wResto > 0 ? (int)(4 * esc) : 0);
@@ -202,7 +228,7 @@ namespace CotaBarra {
             cam.AddArc(0, 0, raio, raio, 180, 90); cam.AddArc(w1 - raio, 0, raio, raio, 270, 90);
             cam.AddArc(w1 - raio, h1 - raio, raio, raio, 0, 90); cam.AddArc(0, h1 - raio, raio, raio, 90, 90); cam.CloseFigure();
             using (SolidBrush b = new SolidBrush(fundo)) g.FillPath(b, cam);
-            using (Pen p = new Pen(borda)) g.DrawPath(p, cam);
+            if (a.AlfaFundo > 1) using (Pen p = new Pen(borda)) g.DrawPath(p, cam);
           }
           float altLinha = fNormal.GetHeight(g), topo = (altura - altLinha * linhas.Count) / 2;
           using (SolidBrush bForte = new SolidBrush(forte)) using (SolidBrush bFraco = new SolidBrush(fraco)) using (SolidBrush bAlerta = new SolidBrush(alerta)) {
@@ -211,7 +237,7 @@ namespace CotaBarra {
               float y = topo + i * altLinha;
               bool ok = c.Estado == "ok";
               // Só a leitura boa fica colorida: a cor de uma leitura velha não é a do agora.
-              using (SolidBrush bCor = new SolidBrush(ok ? CorDe(c.Cor) : fraco)) {
+              using (SolidBrush bCor = new SolidBrush(ok ? CorDe(c.Cor, claro) : fraco)) {
                 g.DrawString(Prompt(c), fForte, c.Estado == "velha" ? bAlerta : bCor, pad, y, fmt);
                 g.DrawString(s.Usado, fForte, bCor, x2 + wUso - Medir(g, s.Usado, fForte, fmt), y, fmt);   // à direita, colado na barra "/"
               }

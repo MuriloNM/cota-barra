@@ -15,7 +15,7 @@ using Temporizador = System.Windows.Forms.Timer;
 namespace CotaBarra {
   static class Nativo {
     [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left, Top, Right, Bottom; }
-    [StructLayout(LayoutKind.Sequential)] struct MONITORINFO { public int cbSize; public RECT rcMonitor, rcWork; public int dwFlags; }
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] struct MONITORINFO { public int cbSize; public RECT rcMonitor, rcWork; public int dwFlags; [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string szDevice; }
     [DllImport("user32.dll")] public static extern IntPtr SetProcessDpiAwarenessContext(IntPtr v);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr FindWindow(string a, string b);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr FindWindowEx(IntPtr p, IntPtr c, string a, string b);
@@ -29,6 +29,19 @@ namespace CotaBarra {
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern bool GetMonitorInfo(IntPtr m, ref MONITORINFO i);
 
     public static IntPtr Barra() { return FindWindow("Shell_TrayWnd", null); }
+    public static string Dispositivo(IntPtr h) {
+      MONITORINFO i = new MONITORINFO(); i.cbSize = Marshal.SizeOf(typeof(MONITORINFO));
+      return GetMonitorInfo(MonitorFromWindow(h, 2), ref i) ? i.szDevice : "";
+    }
+    // A barra de um monitor; IntPtr.Zero se ele não tiver barra. Os outros monitores usam outra classe de janela.
+    public static IntPtr BarraDe(string dispositivo) {
+      IntPtr p = Barra();
+      if (p != IntPtr.Zero && Dispositivo(p) == dispositivo) return p;
+      IntPtr s = IntPtr.Zero;
+      while ((s = FindWindowEx(IntPtr.Zero, s, "Shell_SecondaryTrayWnd", null)) != IntPtr.Zero)
+        if (Dispositivo(s) == dispositivo) return s;
+      return IntPtr.Zero;
+    }
     public static Rectangle Retangulo(IntPtr h) {
       RECT r; if (!GetWindowRect(h, out r)) return Rectangle.Empty;
       return Rectangle.FromLTRB(r.Left, r.Top, r.Right, r.Bottom);
@@ -118,6 +131,9 @@ namespace CotaBarra {
     ToolStripMenuItem itemAmbas, itemPad, itemTrab;
 
     string vista = "ambas"; int? manual;
+    string tema = "auto", tamanho = "normal", fundo = "opaco", fonte = "JetBrains Mono", monitor;   // monitor null = o principal
+    ToolStripMenuItem subMonitor, subFonte;
+    readonly List<Action> marcas = new List<Action>();
     DateTime escondidaAte = DateTime.MinValue, ultimaVarredura = DateTime.MinValue, ultimoDado = DateTime.MinValue;
     int widgetsDir, bandejaUia; int? iconesEsq, iconesDir;
     string assinatura = "", textoDica = "";
@@ -166,13 +182,18 @@ namespace CotaBarra {
         object o;
         if (d.TryGetValue("vista", out o) && o is string) vista = (string)o;
         if (d.TryGetValue("deslocManual", out o) && o != null) manual = Convert.ToInt32(o);
+        if (d.TryGetValue("tema", out o) && o is string) tema = (string)o;
+        if (d.TryGetValue("tamanho", out o) && o is string) tamanho = (string)o;
+        if (d.TryGetValue("fundo", out o) && o is string) fundo = (string)o;
+        if (d.TryGetValue("fonte", out o) && o is string) fonte = (string)o;
+        if (d.TryGetValue("monitor", out o) && o is string) monitor = (string)o;
       } catch { }
     }
     void SalvarConfig() {
       try {
         Directory.CreateDirectory(Pasta);
         Dictionary<string, object> d = new Dictionary<string, object>();
-        d["vista"] = vista; d["deslocManual"] = manual;
+        d["vista"] = vista; d["deslocManual"] = manual; d["tema"] = tema; d["tamanho"] = tamanho; d["fundo"] = fundo; d["fonte"] = fonte; d["monitor"] = monitor;
         File.WriteAllText(Path.Combine(Pasta, "pilula.json"), new JavaScriptSerializer().Serialize(d), new UTF8Encoding(true));   // com BOM, para a versão em PowerShell ler os acentos
       } catch { }
     }
@@ -181,25 +202,108 @@ namespace CotaBarra {
     }
 
     void MontarMenu() {
-      itemAmbas = new ToolStripMenuItem("Mostrar as duas contas", null, delegate { MudarVista("ambas"); });
+      itemAmbas = new ToolStripMenuItem("As duas", null, delegate { MudarVista("ambas"); });
       itemPad = new ToolStripMenuItem("Só Padrão", null, delegate { MudarVista("Padrão"); });
       itemTrab = new ToolStripMenuItem("Só Trabalho", null, delegate { MudarVista("Trabalho"); });
-      menu.Items.AddRange(new ToolStripItem[] { itemAmbas, itemPad, itemTrab, new ToolStripSeparator() });
+      ToolStripMenuItem subContas = new ToolStripMenuItem("Contas");
+      subContas.DropDownItems.AddRange(new ToolStripItem[] { itemAmbas, itemPad, itemTrab });
+      subMonitor = new ToolStripMenuItem("Monitor");
+      subFonte = new ToolStripMenuItem("Fonte");
+      menu.Items.Add(subContas);
+      menu.Items.Add(subMonitor);
+      menu.Items.Add(new ToolStripSeparator());
+      menu.Items.Add(Opcoes("Tema", new[] { "auto", "Igual ao Windows", "escuro", "Escuro", "claro", "Claro" }, () => tema, v => tema = v));
+      menu.Items.Add(Opcoes("Tamanho", new[] { "pequena", "Pequeno", "media", "Médio", "normal", "Normal", "grande", "Grande" }, () => tamanho, v => tamanho = v));
+      menu.Items.Add(Opcoes("Fundo", new[] { "opaco", "Sólido", "translucido", "Translúcido", "transparente", "Transparente" }, () => fundo, v => fundo = v));
+      menu.Items.Add(subFonte);
+      menu.Items.Add("Voltar ao visual padrão", null, delegate {
+        tema = "auto"; tamanho = "normal"; fundo = "opaco"; fonte = "JetBrains Mono";
+        foreach (Action m in marcas) m();
+        SalvarConfig(); Atualizar(true);
+      });
+      menu.Items.Add(new ToolStripSeparator());
       menu.Items.Add("Esconder por 30 min", null, delegate { escondidaAte = DateTime.Now.AddMinutes(30); AtualizarVisibilidade(); });
       menu.Items.Add("Voltar à posição automática", null, delegate { manual = null; SalvarConfig(); Atualizar(true); });
       menu.Items.Add(new ToolStripSeparator());
       menu.Items.Add("Fechar", null, delegate { Fechar(); });
+      // Monitores podem entrar e sair: a lista é refeita a cada abertura. As fontes, só na primeira.
+      menu.Opening += delegate { MontarMonitores(); if (subFonte.DropDownItems.Count == 0) MontarFontes(); };
+      subMonitor.DropDownItems.Add("-");   // para aparecer a seta do submenu
+      subFonte.DropDownItems.Clear();
       MarcarMenu();
     }
     void MarcarMenu() { itemAmbas.Checked = vista == "ambas"; itemPad.Checked = vista == "Padrão"; itemTrab.Checked = vista == "Trabalho"; }
     void MudarVista(string v) { vista = v; SalvarConfig(); MarcarMenu(); Atualizar(true); }
+
+    // Submenu de escolha única. pares = valor, rótulo, valor, rótulo...
+    ToolStripMenuItem Opcoes(string titulo, string[] pares, Func<string> ler, Action<string> gravar) {
+      ToolStripMenuItem sub = new ToolStripMenuItem(titulo);
+      List<ToolStripMenuItem> itens = new List<ToolStripMenuItem>();
+      Action marcar = delegate { for (int i = 0; i < itens.Count; i++) itens[i].Checked = pares[i * 2] == ler(); };
+      for (int i = 0; i < pares.Length; i += 2) {
+        string valor = pares[i];
+        itens.Add(new ToolStripMenuItem(pares[i + 1], null, delegate { gravar(valor); marcar(); SalvarConfig(); Atualizar(true); }));
+      }
+      sub.DropDownItems.AddRange(itens.ToArray());
+      marcas.Add(marcar);
+      marcar();
+      return sub;
+    }
+
+    void MontarFontes() {
+      List<string> nomes = Desenho.FontesMono();
+      nomes.Add("Segoe UI");
+      string[] pares = new string[nomes.Count * 2];
+      for (int i = 0; i < nomes.Count; i++) { pares[i * 2] = nomes[i]; pares[i * 2 + 1] = nomes[i]; }
+      ToolStripMenuItem pronto = Opcoes("Fonte", pares, () => fonte, v => fonte = v);
+      while (pronto.DropDownItems.Count > 0) subFonte.DropDownItems.Add(pronto.DropDownItems[0]);
+    }
+
+    // Lista os monitores que o Windows enxerga agora. Sem barra de tarefas não há onde pousar: fica desabilitado.
+    void MontarMonitores() {
+      subMonitor.DropDownItems.Clear();
+      string atual = Nativo.Dispositivo(BarraAtual());
+      Screen[] telas = Screen.AllScreens;
+      Array.Sort(telas, (a, b) => string.CompareOrdinal(a.DeviceName, b.DeviceName));
+      Screen principal = Screen.PrimaryScreen;
+      foreach (Screen t in telas) {
+        string dev = t.DeviceName;
+        string lado = t.Primary ? "principal" : t.Bounds.Left >= principal.Bounds.Right ? "à direita" : t.Bounds.Right <= principal.Bounds.Left ? "à esquerda" : t.Bounds.Top < principal.Bounds.Top ? "acima" : "abaixo";
+        bool temBarra = Nativo.BarraDe(dev) != IntPtr.Zero;
+        ToolStripMenuItem it = new ToolStripMenuItem("Monitor " + dev.Replace(@"\\.\DISPLAY", "") + " (" + lado + ", " + t.Bounds.Width + "×" + t.Bounds.Height + ")" + (temBarra ? "" : " sem barra de tarefas"), null, delegate { MudarMonitor(dev); });
+        it.Checked = dev == atual;
+        it.Enabled = temBarra;
+        subMonitor.DropDownItems.Add(it);
+      }
+    }
+    // A posição arrastada vale para uma barra; na outra, volta para a automática.
+    void MudarMonitor(string dev) {
+      if (dev == Nativo.Dispositivo(BarraAtual())) return;
+      monitor = dev; manual = null; SalvarConfig();
+      Varrer(); Atualizar(true); AtualizarVisibilidade();
+    }
+    // O monitor escolhido; se ele foi desconectado, o principal (a escolha fica guardada para quando voltar).
+    IntPtr BarraAtual() {
+      if (monitor != null) { IntPtr b = Nativo.BarraDe(monitor); if (b != IntPtr.Zero) return b; }
+      return Nativo.Barra();
+    }
+    Aparencia AparenciaAtual() {
+      Aparencia a = new Aparencia { Fonte = fonte };
+      a.Letra = tamanho == "pequena" ? 10 : tamanho == "media" ? 11 : tamanho == "grande" ? 13.5 : 12;
+      a.AlfaFundo = fundo == "transparente" ? 1 : fundo == "translucido" ? 150 : 245;
+      a.Claro = tema == "claro" || (tema == "auto" && WindowsClaro());
+      return a;
+    }
+    static bool WindowsClaro() {
+      try { object v = Microsoft.Win32.Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "SystemUsesLightTheme", 0); return v is int && (int)v == 1; } catch { return false; }
+    }
     void Fechar() { relogio.Stop(); gatilho.Stop(); vigia.Dispose(); Application.Exit(); }
 
     // Onde estão os ícones. Roda pouco: a cada 60 s, ou no máximo a cada 15 s quando a janela da frente muda.
     void Varrer() {
       ultimaVarredura = DateTime.Now;
       try {
-        AutomationElement raiz = AutomationElement.FromHandle(Nativo.Barra());
+        AutomationElement raiz = AutomationElement.FromHandle(BarraAtual());
         int? esq = null, dir = null; int wid = 0, band = 0;
         foreach (AutomationElement e in raiz.FindAll(TreeScope.Descendants, Condition.TrueCondition)) {
           AutomationElement.AutomationElementInformation c = e.Current;
@@ -220,8 +324,9 @@ namespace CotaBarra {
     // Desenha e posiciona. Só redesenha se algo visível mudou.
     void Atualizar(bool forcar) {
       try {
-        IntPtr barra = Nativo.Barra();
+        IntPtr barra = BarraAtual();
         if (barra == IntPtr.Zero) return;
+        Aparencia ap = AparenciaAtual();
         Rectangle r = Nativo.Retangulo(barra);
         uint dpi = Nativo.GetDpiForWindow(barra);
         double esc = dpi / 96.0;
@@ -229,7 +334,7 @@ namespace CotaBarra {
         foreach (Conta c in Cota.Contas()) if (vista == "ambas" || vista == c.Rotulo) lista.Add(c);
         StringBuilder sb = new StringBuilder();
         foreach (Conta c in lista) sb.Append(c.Assinatura()).Append(';');
-        string sig = sb + "#" + r + "#" + dpi + "#" + widgetsDir + "#" + iconesEsq + "#" + iconesDir + "#" + bandejaUia + "#" + manual;
+        string sig = sb + "#" + r + "#" + dpi + "#" + ap.Claro + "#" + widgetsDir + "#" + iconesEsq + "#" + iconesDir + "#" + bandejaUia + "#" + manual;
         if (!forcar && sig == assinatura) return;
         assinatura = sig;
 
@@ -245,13 +350,13 @@ namespace CotaBarra {
         Bitmap bmp = null; int? x = null; string origem;
         foreach (bool compacto in new[] { false, true }) {
           if (bmp != null) bmp.Dispose();
-          bmp = Desenho.Pilula(lista, esc, alt, compacto);
+          bmp = Desenho.Pilula(lista, esc, alt, compacto, ap);
           x = Cota.Posicao(r.Left, r.Right, bandeja, widgetsDir, iconesEsq, iconesDir, bmp.Width, margem, manual, out origem);
           if (x != null) break;
         }
         using (bmp) {
           posX = x ?? bandeja - margem - bmp.Width;   // sem vão nenhum: fica colada na bandeja
-          posY = r.Top + (r.Height - alt) / 2;
+          posY = r.Top + (r.Height - bmp.Height) / 2;
           posL = bmp.Width; posBarra = r; posMargem = margem; posBandeja = bandeja;
           forma.Pintar(bmp, posX, posY);
         }
@@ -261,7 +366,7 @@ namespace CotaBarra {
     // Some em tela cheia, com a barra escondida ou a pedido; senão garante que está por cima.
     void AtualizarVisibilidade() {
       try {
-        IntPtr barra = Nativo.Barra();
+        IntPtr barra = BarraAtual();
         bool mostrar = barra != IntPtr.Zero;
         if (mostrar) {
           Rectangle r = Nativo.Retangulo(barra), m = Nativo.Monitor(barra);
