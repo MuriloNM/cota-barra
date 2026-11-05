@@ -119,7 +119,11 @@ namespace CotaBarra {
         Confere("nunca passa da altura da barra", gr.Height <= 60, true);
       }
       Confere("fonte que não existe cai numa instalada", Desenho.FonteMono("Fonte Que Nao Existe") != "Fonte Que Nao Existe", true);
+      Confere("JetBrains Mono vem com o programa", Desenho.Embutida("JetBrains Mono") != null, true);
+      using (Font fb = Desenho.NovaFonte("JetBrains Mono", 14, FontStyle.Bold))
+        Confere("fonte embutida tem negrito", fb.Bold && fb.FontFamily.Name == "JetBrains Mono", true);
       List<string> fontes = Desenho.FontesMono();
+      Confere("menu de fontes traz a JetBrains Mono", fontes.Contains("JetBrains Mono"), true);
       Console.WriteLine("fontes no menu: " + string.Join(", ", fontes));
       Confere("lista de fontes não traz símbolos", fontes.Contains("Marlett") || fontes.Contains("Wingdings 2"), false);
       Confere("lista de fontes não traz variações de peso", fontes.Contains("JetBrains Mono Light"), false);

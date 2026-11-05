@@ -98,6 +98,7 @@ Per-model quota and the 5-hour window are already drawn, but the plugin does not
 | `bin\conferir.exe` | Tests formula, position and drawing |
 | `medir-cpu.ps1` | Measures CPU and memory |
 | `empacotar.ps1` | Builds the release zip |
+| `fontes/` | JetBrains Mono, loaded only by the program: nothing is installed in Windows |
 | `pilula.ps1`, `bandeja.ps1` | Old PowerShell version and tray icon, not maintained |
 
-License: MIT.
+License: MIT. The font in `fontes/` is under the [SIL Open Font License 1.1](fontes/OFL.txt).

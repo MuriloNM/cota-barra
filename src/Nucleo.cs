@@ -8,6 +8,7 @@ using System.Drawing.Imaging;
 using System.Drawing.Text;
 using System.Globalization;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using System.Web.Script.Serialization;
 
@@ -392,15 +393,47 @@ namespace CotaBarra {
     static int Medir(Graphics g, string t, Font f, StringFormat fmt) {
       return t.Length == 0 ? 0 : (int)Math.Ceiling(g.MeasureString(t, f, 4000, fmt).Width);
     }
-    // A primeira fonte instalada da lista. new Font() trocaria em silêncio por uma sem serifa.
+    // A JetBrains Mono vem em fontes\ e só este programa a enxerga: nada é instalado no Windows.
+    [DllImport("gdi32.dll", CharSet = CharSet.Unicode, EntryPoint = "AddFontResourceExW")]
+    static extern int AddFontResourceEx(string arquivo, uint flags, IntPtr reservado);
+    const uint FrPrivate = 0x10;
+    static PrivateFontCollection colecaoEmbutida;   // precisa ficar viva enquanto as fontes forem usadas
+    static FontFamily[] familiasEmbutidas;
+    public static FontFamily Embutida(string nome) {
+      if (familiasEmbutidas == null) {
+        familiasEmbutidas = new FontFamily[0];
+        try {
+          string pasta = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(typeof(Desenho).Assembly.Location), @"..\fontes"));
+          string[] arquivos = { Path.Combine(pasta, "JetBrainsMono-Regular.ttf"), Path.Combine(pasta, "JetBrainsMono-Bold.ttf") };
+          if (File.Exists(arquivos[0]) && File.Exists(arquivos[1])) {
+            PrivateFontCollection c = new PrivateFontCollection();
+            foreach (string a in arquivos) {
+              c.AddFontFile(a);                             // para o desenho da pílula e do cartão (GDI+)
+              AddFontResourceEx(a, FrPrivate, IntPtr.Zero); // para os textos do painel (GDI)
+            }
+            colecaoEmbutida = c;
+            familiasEmbutidas = c.Families;
+          }
+        } catch { }   // sem os arquivos, a pílula segue com as fontes instaladas
+      }
+      foreach (FontFamily f in familiasEmbutidas) if (string.Equals(f.Name, nome, StringComparison.OrdinalIgnoreCase)) return f;
+      return null;
+    }
+    // new Font(nome) não enxerga as fontes embutidas: todo texto passa por aqui.
+    public static Font NovaFonte(string nome, float px, FontStyle estilo) {
+      FontFamily f = Embutida(nome);
+      return f != null ? new Font(f, px, estilo, GraphicsUnit.Pixel) : new Font(nome, px, estilo, GraphicsUnit.Pixel);
+    }
+    // A primeira fonte disponível da lista. new Font() trocaria em silêncio por uma sem serifa.
     public static string FonteMono(string preferida) {
       foreach (string nome in new[] { preferida, "JetBrains Mono", "Cascadia Mono", "Consolas" }) {
         if (string.IsNullOrEmpty(nome)) continue;
+        if (Embutida(nome) != null) return Embutida(nome).Name;
         try { using (FontFamily f = new FontFamily(nome)) return f.Name; } catch (ArgumentException) { }
       }
       return FontFamily.GenericMonospace.Name;
     }
-    // Fontes de largura fixa instaladas, sem variações de peso nem fontes de símbolos ou só de CJK.
+    // Fontes de largura fixa disponíveis, sem variações de peso nem fontes de símbolos ou só de CJK.
     public static List<string> FontesMono() {
       Regex fora = new Regex(@"(ExtraLight|SemiLight|Light|Medium|SemiBold|ExtraBold|Thin|Black)$|Marlett|MT Extra|Outlook|Icons|MDL2|Wingdings|Webdings|Symbol|MingLiU|SimSun|Gothic|Holo", RegexOptions.IgnoreCase);
       List<string> lista = new List<string>();
@@ -414,6 +447,10 @@ namespace CotaBarra {
             if (Math.Abs(i - w) < 1) lista.Add(fam.Name);
           }
         }
+      }
+      if (Embutida("JetBrains Mono") != null && !lista.Contains("JetBrains Mono")) {
+        lista.Add("JetBrains Mono");
+        lista.Sort(StringComparer.OrdinalIgnoreCase);
       }
       return lista;
     }
@@ -471,8 +508,8 @@ namespace CotaBarra {
       float px = (float)((duas ? a.Letra : a.Letra + 2) * esc);
       string fonte = FonteMono(a.Fonte);
 
-      using (Font fNormal = new Font(fonte, px, FontStyle.Regular, GraphicsUnit.Pixel))
-      using (Font fForte = new Font(fonte, px, FontStyle.Bold, GraphicsUnit.Pixel))
+      using (Font fNormal = NovaFonte(fonte, px, FontStyle.Regular))
+      using (Font fForte = NovaFonte(fonte, px, FontStyle.Bold))
       using (StringFormat fmt = (StringFormat)StringFormat.GenericTypographic.Clone()) {
         fmt.FormatFlags |= StringFormatFlags.MeasureTrailingSpaces | StringFormatFlags.NoWrap;
         List<Seg> linhas = new List<Seg>();
@@ -546,9 +583,9 @@ namespace CotaBarra {
       Paleta p = a.Cores;
       float px = (float)(13 * esc);
       string fonte = FonteMono(null);   // a fonte escolhida vale só para a pílula; o cartão fica sempre igual
-      using (Font fN = new Font(fonte, px, FontStyle.Regular, GraphicsUnit.Pixel))
-      using (Font fF = new Font(fonte, px, FontStyle.Bold, GraphicsUnit.Pixel))
-      using (Font fP = new Font(fonte, (float)(11 * esc), FontStyle.Regular, GraphicsUnit.Pixel))
+      using (Font fN = NovaFonte(fonte, px, FontStyle.Regular))
+      using (Font fF = NovaFonte(fonte, px, FontStyle.Bold))
+      using (Font fP = NovaFonte(fonte, (float)(11 * esc), FontStyle.Regular))
       using (StringFormat fmt = (StringFormat)StringFormat.GenericTypographic.Clone()) {
         fmt.FormatFlags |= StringFormatFlags.MeasureTrailingSpaces | StringFormatFlags.NoWrap;
         int pad = (int)(14 * esc), entre = (int)(14 * esc), n = 36, cel = (int)(6 * esc), vao = Math.Max(1, (int)(1.5 * esc)), altoBarra = (int)(9 * esc);

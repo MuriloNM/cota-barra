@@ -90,6 +90,7 @@ A cota por modelo e a janela de 5 h já são desenhadas, mas o plugin ainda não
 | `bin\conferir.exe` | Testa fórmula, posição e desenho |
 | `medir-cpu.ps1` | Mede CPU e memória |
 | `empacotar.ps1` | Monta o zip da versão |
+| `fontes/` | JetBrains Mono, carregada só pelo programa: nada é instalado no Windows |
 | `pilula.ps1`, `bandeja.ps1` | Versão antiga em PowerShell e ícone na bandeja, não mantidos |
 
-Licença: MIT.
+Licença: MIT. A fonte em `fontes/` usa a [SIL Open Font License 1.1](fontes/OFL.txt).
