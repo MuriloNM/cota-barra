@@ -51,7 +51,8 @@ namespace CotaBarra {
     // Janela de 5 h: só existe se o arquivo trouxer. No plano sem essa janela, nada disso aparece.
     public bool Tem5h, Velha5h; public int Uso5h; public string Reset5hTxt = "";
     public double Vel5hHora, Acaba5hMin = -1;  // pontos por hora agora, minutos até 100% antes do reset (-1: não acaba)
-    public string Assinatura() { return Rotulo + "|" + Estado + "|" + Cor + "|" + Usado + "|" + Esperado + "|" + Projecao + "|" + Idade + "|" + Uso5h + "|" + Velha5h + "|" + Cota.Inteiro(Acaba5hMin / 5); }
+    public List<Conta> Modelos = new List<Conta>();   // cotas semanais por modelo, como a do Fable; mesma fórmula da geral
+    public string Assinatura() { return Rotulo + "|" + Estado + "|" + Cor + "|" + Usado + "|" + Esperado + "|" + Projecao + "|" + Idade + "|" + Uso5h + "|" + Velha5h + "|" + Cota.Inteiro(Acaba5hMin / 5) + "|" + string.Join(",", Modelos.ConvertAll(m => m.Assinatura()).ToArray()); }
   }
 
   public class Ponto { public long Lido; public double Usado; public DateTimeOffset Reset; }
@@ -281,6 +282,26 @@ namespace CotaBarra {
       return l;
     }
 
+    // Cotas por modelo guardadas como { lido, janelas: [{ nome, percentUsed, resetsAt }] }. Vencida não aparece.
+    static List<Conta> LerModelos(Dictionary<string, object> json, string conta, DateTimeOffset agora) {
+      List<Conta> l = new List<Conta>();
+      object o;
+      if (json == null || !json.TryGetValue("modelos:" + conta, out o)) return l;
+      Dictionary<string, object> d = o as Dictionary<string, object>;
+      object lido, janelas;
+      if (d == null || !d.TryGetValue("lido", out lido) || !d.TryGetValue("janelas", out janelas) || !(janelas is object[])) return l;
+      foreach (object item in (object[])janelas) {
+        Dictionary<string, object> j = item as Dictionary<string, object>;
+        object nome, usado, reset;
+        if (j == null || !j.TryGetValue("nome", out nome) || !j.TryGetValue("percentUsed", out usado) || !j.TryGetValue("resetsAt", out reset)) continue;
+        try {
+          Conta m = Calcular(new Leitura { Usado = Convert.ToDouble(usado, CultureInfo.InvariantCulture), ResetsAt = Convert.ToString(reset, CultureInfo.InvariantCulture), Lido = Convert.ToInt64(lido, CultureInfo.InvariantCulture) }, Convert.ToString(nome, CultureInfo.InvariantCulture), agora);
+          if (m.Estado == "ok" || m.Estado == "velha") l.Add(m);
+        } catch { }
+      }
+      return l;
+    }
+
     // Cada conta é uma chave "ultima:<nome>"; "padrao" vem primeiro. A chave antiga "ultima" não vale.
     static string RotuloDe(string nome) { return nome == "padrao" ? "Padrão" : nome; }
     public static List<Conta> Contas(DateTimeOffset agora, string caminho) { return Contas(agora, caminho, false); }
@@ -302,6 +323,11 @@ namespace CotaBarra {
         }
         if (usarHistorico) Historico.Registrar(n + "#5h", l5);
         Calcular5h(c, l5, agora, usarHistorico ? Historico.De(n + "#5h") : null);
+        c.Modelos = LerModelos(json, n, agora);
+        if (c.Modelos.Count == 0 && usarHistorico) {
+          string a5m = Arquivo5h();
+          if (a5m != null) c.Modelos = LerModelos(LerArquivo(a5m), n, agora);
+        }
         lista.Add(c);
       }
       if (lista.Count == 0) lista.Add(Calcular(null, "Claude", agora));
@@ -328,7 +354,7 @@ namespace CotaBarra {
   }
 
   public static class Desenho {
-    class Seg { public string Rotulo = "", Usado = "", Resto = "", Cinco = "", Idade = ""; public Conta Conta; public bool TemBarra; }
+    class Seg { public string Rotulo = "", Usado = "", Resto = "", Cinco = "", Modelo = "", Idade = ""; public Conta Conta, ContaModelo; public bool TemBarra; }
 
     public static string TextoAcaba5h(double min) {
       if (min <= 0) return "esgotada";
@@ -351,6 +377,7 @@ namespace CotaBarra {
       s.Resto = barras ? "→ " + c.Projecao + "%" : "/ " + c.Esperado + "% → " + c.Projecao + "%";
       s.Idade = c.Estado == "velha" ? "velha " + c.Idade : c.Idade;
       if (c.Tem5h) s.Cinco = "5h " + c.Uso5h + "%";
+      if (c.Modelos.Count > 0) { s.ContaModelo = c.Modelos[0]; s.Modelo = c.Modelos[0].Rotulo.ToLowerInvariant() + " " + c.Modelos[0].Usado + "%"; }
       return s;
     }
     static int Medir(Graphics g, string t, Font f, StringFormat fmt) {
@@ -427,7 +454,7 @@ namespace CotaBarra {
         const int Celulas = 20;
         int cel = Math.Max(2, (int)(px * 0.30)), vaoCel = Math.Max(1, (int)(px * 0.10));
         bool algumaBarra = false;
-        int wRot = 0, wUso = 0, wResto = 0, wCinco = 0, wIdade = 0, wPrompt, altura;
+        int wRot = 0, wUso = 0, wResto = 0, wCinco = 0, wModelo = 0, wIdade = 0, wPrompt, altura;
         using (Bitmap med = new Bitmap(1, 1)) using (Graphics gm = Graphics.FromImage(med)) {
           foreach (Seg s in linhas) {
             algumaBarra |= s.TemBarra;
@@ -435,6 +462,7 @@ namespace CotaBarra {
             wUso = Math.Max(wUso, Medir(gm, s.Usado, fForte, fmt));
             wResto = Math.Max(wResto, Medir(gm, s.Resto, fNormal, fmt));
             wCinco = Math.Max(wCinco, Medir(gm, s.Cinco, fNormal, fmt));
+            wModelo = Math.Max(wModelo, Medir(gm, s.Modelo, fNormal, fmt));
             wIdade = Math.Max(wIdade, Medir(gm, s.Idade, fNormal, fmt));
           }
           wPrompt = Medir(gm, ">", fForte, fmt);
@@ -447,7 +475,8 @@ namespace CotaBarra {
         int x2 = xB + (wBarra > 0 ? wBarra + vao : 0);
         int x3 = x2 + wUso + (wResto > 0 ? (int)(4 * esc) : 0);
         int x5 = x3 + wResto + (wCinco > 0 ? vao * 2 : 0);
-        int x4 = x5 + wCinco + (wIdade > 0 ? vao * 2 : 0);
+        int x6 = x5 + wCinco + (wModelo > 0 ? vao * 2 : 0);
+        int x4 = x6 + wModelo + (wIdade > 0 ? vao * 2 : 0);
         int largura = x4 + wIdade + pad;
 
         Bitmap bmp = new Bitmap(largura, altura, PixelFormat.Format32bppPArgb);
@@ -474,6 +503,8 @@ namespace CotaBarra {
               if (s.Rotulo.Length > 0) g.DrawString(s.Rotulo, fNormal, bFraco, x1, y, fmt);
               if (s.Resto.Length > 0) g.DrawString(s.Resto, fNormal, ok ? bForte : bFraco, x3, y, fmt);
               if (s.Cinco.Length > 0) g.DrawString(s.Cinco, fNormal, c.Velha5h ? bFraco : c.Acaba5hMin >= 0 ? bAlerta : bForte, x5, y, fmt);
+              if (s.Modelo.Length > 0)
+                using (SolidBrush bM = new SolidBrush(s.ContaModelo.Estado == "ok" ? p.DoRitmo(s.ContaModelo.Cor) : p.Fraco)) g.DrawString(s.Modelo, fNormal, bM, x6, y, fmt);
               if (s.Idade.Length > 0) g.DrawString(s.Idade, fNormal, c.Estado == "velha" ? bAlerta : bFraco, x4, y, fmt);
             }
           }
@@ -516,6 +547,7 @@ namespace CotaBarra {
           if (c.DiasHistorico < Cota.DiasParaConfiar) return v + " · aprendendo, " + c.DiasHistorico + " de " + Cota.DiasParaConfiar + " dias";
           return v + " · pela média: " + c.ProjecaoMedia + "%";
         };
+        Func<Conta, string> linhaModelo = m => m.Rotulo.ToLowerInvariant() + ": " + m.Usado + "% · esperado " + m.Esperado + "% · projeção " + m.Projecao + "%";
         int larg = wBarra, alt;
         float hN, hP;
         using (Bitmap med = new Bitmap(1, 1)) using (Graphics gm = Graphics.FromImage(med)) {
@@ -524,12 +556,13 @@ namespace CotaBarra {
             larg = Math.Max(larg, Medir(gm, linhaRitmo(c), fN, fmt));
             if (TemNumero(c)) larg = Math.Max(larg, Medir(gm, linhaVel(c), fN, fmt));
             if (c.Tem5h) larg = Math.Max(larg, Medir(gm, linha5h(c), fN, fmt));
+            foreach (Conta m in c.Modelos) larg = Math.Max(larg, Medir(gm, linhaModelo(m), fN, fmt));
           }
           larg = Math.Max(larg, Medir(gm, Legenda, fP, fmt));
         }
         alt = pad * 2 + (int)(hP + 10 * esc);
         foreach (Conta c in lista)
-          alt += (int)(hN * 2) + (int)(4 * esc) + entre + (TemNumero(c) ? (int)(hN * 2) + altoBarra + (int)(8 * esc) : 0) + (c.Tem5h ? (int)hN : 0);
+          alt += (int)(hN * 2) + (int)(4 * esc) + entre + (TemNumero(c) ? (int)(hN * 2) + altoBarra + (int)(8 * esc) : 0) + (c.Tem5h ? (int)hN : 0) + c.Modelos.Count * (int)hN;
         alt -= entre;
         int w = larg + pad * 2;
         Bitmap bmp = new Bitmap(w, alt, PixelFormat.Format32bppPArgb);
@@ -566,6 +599,10 @@ namespace CotaBarra {
               y += hN;
               if (c.Tem5h) {
                 g.DrawString(linha5h(c), fN, c.Velha5h ? bW : c.Acaba5hMin >= 0 ? bA : bT, pad, y, fmt);
+                y += hN;
+              }
+              foreach (Conta m in c.Modelos) {
+                using (SolidBrush bM = new SolidBrush(m.Estado == "ok" ? p.DoRitmo(m.Cor) : p.Fraco)) g.DrawString(linhaModelo(m), fN, bM, pad, y, fmt);
                 y += hN;
               }
               y += entre;

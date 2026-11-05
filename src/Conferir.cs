@@ -166,6 +166,21 @@ namespace CotaBarra {
       Confere("lê a janela de 5 h do arquivo", Cota.Contas(Agora, tmp5)[0].Uso5h, 40);
       File.Delete(tmp5);
 
+      Console.WriteLine("--- Cota por modelo (reset em 84 h: esperado 50)");
+      long lidoMs = Agora.AddMinutes(-1).ToUnixTimeMilliseconds();
+      string reset84 = Agora.AddHours(84).ToString("o"), resetVelho = Agora.AddHours(-1).ToString("o");
+      string tmpM = Path.Combine(Path.GetTempPath(), "cota-barra-teste-" + Guid.NewGuid().ToString("N") + ".json");
+      File.WriteAllText(tmpM, "{\"ultima:padrao\":{\"percentUsed\":18,\"resetsAt\":\"" + reset84 + "\",\"lido\":" + lidoMs + "},\"modelos:padrao\":{\"lido\":" + lidoMs + ",\"janelas\":[{\"nome\":\"Fable\",\"percentUsed\":60,\"resetsAt\":\"" + reset84 + "\"},{\"nome\":\"Velho\",\"percentUsed\":5,\"resetsAt\":\"" + resetVelho + "\"}]}}");
+      Conta cm = Cota.Contas(Agora, tmpM)[0];
+      Confere("lê o modelo; vencido não aparece", cm.Modelos.Count, 1);
+      Confere("nome do modelo", cm.Modelos[0].Rotulo, "Fable");
+      Confere("mesma fórmula: esperado", cm.Modelos[0].Esperado, 50);
+      Confere("mesma fórmula: projeção", cm.Modelos[0].Projecao, 120);
+      Confere("mesma fórmula: cor", cm.Modelos[0].Cor, "vermelho");
+      File.Delete(tmpM);
+      using (Bitmap sm = Desenho.Pilula(new[] { C(18, 84, 1) }, 1.5, 60, false, new Aparencia())) using (Bitmap cmb = Desenho.Pilula(new[] { cm }, 1.5, 60, false, new Aparencia()))
+        Confere("modelo aparece na pílula", cmb.Width > sm.Width, true);
+
       Console.WriteLine("--- Cota real agora");
       foreach (Conta c in Cota.Contas())
         Console.WriteLine(c.Rotulo + ": " + c.Estado + " " + c.Cor + " " + c.Usado + "% / " + c.Esperado + "% -> " + c.Projecao + "% (" + c.Idade + ")");
