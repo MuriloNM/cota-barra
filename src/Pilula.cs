@@ -231,6 +231,11 @@ namespace CotaBarra {
     readonly Temporizador relogio = new Temporizador { Interval = 5000 };
     readonly Temporizador gatilho = new Temporizador { Interval = 200 };
     readonly Temporizador arrasto = new Temporizador { Interval = 30 };
+    readonly Temporizador timerOnda = new Temporizador { Interval = 40 };   // só roda enquanto a onda passa
+    const double OndaMs = 1500;
+    string onda = "300";                       // segundos entre as ondas; "0" desliga
+    DateTime proximaOnda = DateTime.MinValue, inicioOnda;
+    bool ultimoCompacto; int ultimaAltura;
     readonly EventWaitHandle sinalFechar;
     Vigia vigia;
     PainelAjustes painel;
@@ -258,6 +263,7 @@ namespace CotaBarra {
       forma.MouseDown += AoPressionar;
       forma.MouseUp += delegate(object s, MouseEventArgs e) { if (e.Button == MouseButtons.Right) AbrirPainel(); };
       arrasto.Tick += delegate { AoArrastar(); };
+      timerOnda.Tick += delegate { QuadroOnda(); };
       gatilho.Tick += delegate {
         gatilho.Stop();
         AtualizarVisibilidade();
@@ -270,9 +276,29 @@ namespace CotaBarra {
         DateTime agora = DateTime.Now;
         if (visivel && (agora - ultimaVarredura).TotalSeconds >= 60) Varrer();
         if (visivel && (agora - ultimoDado).TotalSeconds >= 15) { ultimoDado = agora; Atualizar(false); }
+        if (visivel && agora >= proximaOnda) IniciarOnda();
       };
       Varrer();
       forma.Shown += delegate { Atualizar(true); visivel = true; forma.Reforcar(); relogio.Start(); AtualizarVisibilidade(); };
+    }
+
+    // ---------- Onda de cor nas barras ----------
+    void IniciarOnda() {
+      int seg;
+      if (!int.TryParse(onda, out seg) || seg <= 0) { proximaOnda = DateTime.MaxValue; return; }
+      proximaOnda = DateTime.Now.AddSeconds(seg);
+      if (timerOnda.Enabled || arrastando || !visivel || estilo == "texto" || ultimoCompacto) return;
+      inicioOnda = DateTime.Now;
+      timerOnda.Start();
+    }
+    void QuadroOnda() {
+      double t = (DateTime.Now - inicioOnda).TotalMilliseconds / OndaMs;
+      if (t >= 1 || arrastando || !visivel) { timerOnda.Stop(); if (visivel) Atualizar(true); return; }
+      try {
+        Aparencia ap = AparenciaAtual();
+        ap.Onda = (float)(-0.25 + t * 1.6);   // entra antes do começo e sai depois do fim
+        using (Bitmap b = Desenho.Pilula(listaAtual, posEsc, ultimaAltura, false, ap)) forma.Pintar(b, posX, posY);
+      } catch (Exception ex) { timerOnda.Stop(); Registrar("onda: " + ex.Message); }
     }
 
     void LerConfig() {
@@ -281,7 +307,7 @@ namespace CotaBarra {
         object o;
         if (d.TryGetValue("deslocManual", out o) && o != null) manual = Convert.ToInt32(o);
         vista = Texto(d, "vista", vista); tema = Texto(d, "tema", tema); paleta = Texto(d, "paleta", paleta); estilo = Texto(d, "estilo", estilo);
-        tamanho = Texto(d, "tamanho", tamanho); fundo = Texto(d, "fundo", fundo); fonte = Texto(d, "fonte", fonte); monitor = Texto(d, "monitor", monitor);
+        tamanho = Texto(d, "tamanho", tamanho); fundo = Texto(d, "fundo", fundo); fonte = Texto(d, "fonte", fonte); monitor = Texto(d, "monitor", monitor); onda = Texto(d, "onda", onda);
       } catch { }
     }
     static string Texto(Dictionary<string, object> d, string chave, string padrao) { object o; return d.TryGetValue(chave, out o) && o is string ? (string)o : padrao; }
@@ -289,7 +315,7 @@ namespace CotaBarra {
       try {
         Directory.CreateDirectory(Pasta);
         Dictionary<string, object> d = new Dictionary<string, object>();
-        d["vista"] = vista; d["deslocManual"] = manual; d["tema"] = tema; d["paleta"] = paleta; d["estilo"] = estilo; d["tamanho"] = tamanho; d["fundo"] = fundo; d["fonte"] = fonte; d["monitor"] = monitor;
+        d["vista"] = vista; d["deslocManual"] = manual; d["tema"] = tema; d["paleta"] = paleta; d["estilo"] = estilo; d["tamanho"] = tamanho; d["fundo"] = fundo; d["fonte"] = fonte; d["monitor"] = monitor; d["onda"] = onda;
         File.WriteAllText(Path.Combine(Pasta, "pilula.json"), new JavaScriptSerializer().Serialize(d), new UTF8Encoding(true));   // com BOM, para a versão em PowerShell ler os acentos
       } catch { }
     }
@@ -316,6 +342,8 @@ namespace CotaBarra {
       l.Add(MontarMonitores());
       l.Add(Grupo("estilo", () => estilo, v => estilo = v, "barras", "barras", "texto", "só texto"));
       l.Add(Grupo("paleta", () => paleta, v => paleta = v, "tokyo", "tokyo night", "catppuccin", "catppuccin", "terminal", "terminal"));
+      // Ao escolher, a onda passa na hora, para mostrar como fica.
+      l.Add(Grupo("onda", () => onda, v => { onda = v; proximaOnda = DateTime.MinValue; IniciarOnda(); }, "0", "desligada", "30", "30 s", "60", "1 min", "300", "5 min", "900", "15 min"));
       l.Add(Grupo("tema", () => tema, v => tema = v, "auto", "igual ao windows", "escuro", "escuro", "claro", "claro"));
       l.Add(Grupo("tamanho", () => tamanho, v => tamanho = v, "pequena", "p", "media", "m", "normal", "g", "grande", "gg"));
       l.Add(Grupo("fundo", () => fundo, v => fundo = v, "opaco", "sólido", "translucido", "translúcido", "transparente", "transparente"));
@@ -326,7 +354,7 @@ namespace CotaBarra {
       Secao acoes = new Secao { Titulo = "ações" };
       acoes.Chips.Add(new Chip { Texto = "abrir com o windows", Ativo = AbreComWindows, Acao = delegate { MudarInicio(!AbreComWindows()); } });
       acoes.Chips.Add(new Chip { Texto = "visual padrão", Acao = delegate {
-        tema = "auto"; paleta = PaletaPadrao; estilo = EstiloPadrao; tamanho = TamanhoPadrao; fundo = FundoPadrao; fonte = "JetBrains Mono"; SalvarConfig(); Atualizar(true);
+        tema = "auto"; paleta = PaletaPadrao; estilo = EstiloPadrao; tamanho = TamanhoPadrao; fundo = FundoPadrao; fonte = "JetBrains Mono"; onda = "300"; proximaOnda = DateTime.MinValue; SalvarConfig(); Atualizar(true);
       } });
       acoes.Chips.Add(new Chip { Texto = "posição automática", Acao = delegate { manual = null; SalvarConfig(); Atualizar(true); } });
       acoes.Chips.Add(new Chip { Texto = "esconder 30 min", Acao = delegate { escondidaAte = DateTime.Now.AddMinutes(30); if (painel != null) painel.Encerrar(); AtualizarVisibilidade(); } });
@@ -401,7 +429,7 @@ namespace CotaBarra {
       try { object v = Microsoft.Win32.Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "SystemUsesLightTheme", 0); return v is int && (int)v == 1; } catch { return false; }
     }
     void MudarVista(string v) { vista = v; SalvarConfig(); Atualizar(true); }
-    void Fechar() { relogio.Stop(); gatilho.Stop(); vigia.Dispose(); Application.Exit(); }
+    void Fechar() { relogio.Stop(); gatilho.Stop(); timerOnda.Stop(); vigia.Dispose(); Application.Exit(); }
 
     // ---------- Cartão de detalhe ----------
     void MostrarCartao() {
@@ -470,8 +498,10 @@ namespace CotaBarra {
           if (bmp != null) bmp.Dispose();
           bmp = Desenho.Pilula(lista, esc, alt, compacto, ap);
           x = Cota.Posicao(r.Left, r.Right, bandeja, widgetsDir, iconesEsq, iconesDir, bmp.Width, margem, manual, out origem);
+          ultimoCompacto = compacto;
           if (x != null) break;
         }
+        ultimaAltura = alt;
         using (bmp) {
           posX = x ?? bandeja - margem - bmp.Width;   // sem vão nenhum: fica colada na bandeja
           posY = r.Top + (r.Height - bmp.Height) / 2;

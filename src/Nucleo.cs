@@ -40,6 +40,7 @@ namespace CotaBarra {
   public class Aparencia {
     public string Fonte = "JetBrains Mono", NomePaleta = "tokyo";
     public double Letra = 10; public int AlfaFundo = 1; public bool Claro, Barras = true;
+    public float Onda = Desenho.SemOnda;   // onde a onda de cor está na barra: 0 é o começo, 1 é o fim
     public Paleta Cores { get { return Paleta.De(NomePaleta, Claro); } }
   }
 
@@ -412,14 +413,31 @@ namespace CotaBarra {
     static string Prompt(Conta c) { return c.Estado == "ok" ? ">" : c.Estado == "velha" ? "~" : "x"; }
 
     // Barra em células: cheia até o usado, apagada até a projeção, trilha no resto e um risco no esperado de hoje.
+    public const float SemOnda = -9f;
+    const float LarguraOnda = 0.22f, ForcaOnda = 0.55f;   // sutil: menos de 1/4 da barra, sem chegar à cor pura
+    static Color Misturar(Color a, Color b, float k) {
+      return Color.FromArgb(a.A, (int)(a.R + (b.R - a.R) * k), (int)(a.G + (b.G - a.G) * k), (int)(a.B + (b.B - a.B) * k));
+    }
     public static void Barra(Graphics g, int x, int y, int cel, int vao, int alto, int n, Conta c, Color cor, Color trilha, Color risco) {
+      Barra(g, x, y, cel, vao, alto, n, c, cor, trilha, risco, SemOnda, Color.Empty);
+    }
+    public static void Barra(Graphics g, int x, int y, int cel, int vao, int alto, int n, Conta c, Color cor, Color trilha, Color risco, float onda, Color corOnda) {
       SmoothingMode antes = g.SmoothingMode;
       g.SmoothingMode = SmoothingMode.None;
       int cheias = Math.Min(n, Cota.Inteiro(c.Usado / 100.0 * n));
       int proj = Math.Max(cheias, Math.Min(n, Cota.Inteiro(c.Projecao / 100.0 * n)));
-      using (SolidBrush bCor = new SolidBrush(cor)) using (SolidBrush bProj = new SolidBrush(Color.FromArgb(95, cor))) using (SolidBrush bTrilha = new SolidBrush(trilha)) {
-        for (int i = 0; i < n; i++)
-          g.FillRectangle(i < cheias ? bCor : i < proj ? bProj : bTrilha, x + i * (cel + vao), y, cel, alto);
+      Color cProj = Color.FromArgb(95, cor);
+      for (int i = 0; i < n; i++) {
+        Color base1 = i < cheias ? cor : i < proj ? cProj : trilha;
+        if (onda != SemOnda) {
+          float d = Math.Abs((n > 1 ? i / (float)(n - 1) : 0) - onda);
+          if (d < LarguraOnda) {
+            float k = 1 - d / LarguraOnda;   // suave nas pontas da onda
+            base1 = Misturar(base1, corOnda, k * k * ForcaOnda);
+            base1 = Color.FromArgb(Math.Max((int)base1.A, (int)(120 * k)), base1);   // as células apagadas também acendem um pouco
+          }
+        }
+        using (SolidBrush b = new SolidBrush(base1)) g.FillRectangle(b, x + i * (cel + vao), y, cel, alto);
       }
       int total = n * cel + (n - 1) * vao;
       int xr = x + Math.Min(total - 1, (int)(c.Esperado / 100.0 * total));
@@ -498,7 +516,8 @@ namespace CotaBarra {
               }
               if (s.TemBarra) {
                 int altoBarra = (int)(px * 0.62);
-                Barra(g, xB, (int)(y + (altLinha - altoBarra) / 2), cel, vaoCel, altoBarra, Celulas, c, cor, trilha, p.Texto);
+                float ondaLinha = a.Onda == SemOnda ? SemOnda : a.Onda - i * 0.08f;   // a segunda linha vem um pouco atrás
+                Barra(g, xB, (int)(y + (altLinha - altoBarra) / 2), cel, vaoCel, altoBarra, Celulas, c, cor, trilha, p.Texto, ondaLinha, p.Destaque);
               }
               if (s.Rotulo.Length > 0) g.DrawString(s.Rotulo, fNormal, bFraco, x1, y, fmt);
               if (s.Resto.Length > 0) g.DrawString(s.Resto, fNormal, ok ? bForte : bFraco, x3, y, fmt);

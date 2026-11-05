@@ -23,6 +23,11 @@ namespace CotaBarra {
       return x == null ? "nada" : o + " " + x;
     }
 
+    static int Diferentes(Bitmap a, Bitmap b) {
+      int n = 0;
+      for (int y = 0; y < a.Height; y++) for (int x = 0; x < a.Width; x++) if (a.GetPixel(x, y) != b.GetPixel(x, y)) n++;
+      return n;
+    }
     static Conta Vel(double usado, List<Ponto> h) { return Cota.Calcular(L(usado, 84, 1), "x", Agora, h); }
     // Dois pontos: um há "horas" com "antes" e um agora com "usado".
     static List<Ponto> H(double usado, double horas, double antes) {
@@ -165,6 +170,15 @@ namespace CotaBarra {
       File.WriteAllText(tmp5, "{\"ultima:padrao\":{\"percentUsed\":18,\"resetsAt\":\"2026-11-09T19:00:00Z\",\"lido\":1793835996553},\"cinco_horas:padrao\":{\"percentUsed\":40,\"resetsAt\":\"2026-11-05T02:00:00Z\",\"lido\":1793835996553}}");
       Confere("lê a janela de 5 h do arquivo", Cota.Contas(Agora, tmp5)[0].Uso5h, 40);
       File.Delete(tmp5);
+
+      Console.WriteLine("--- Onda de cor");
+      Func<Aparencia, Bitmap> pil = ap => Desenho.Pilula(new[] { C(50, 84, 1) }, 1.5, 60, false, ap);
+      using (Bitmap sem = pil(new Aparencia { AlfaFundo = 245 })) using (Bitmap com = pil(new Aparencia { AlfaFundo = 245, Onda = 0.5f })) using (Bitmap fora = pil(new Aparencia { AlfaFundo = 245, Onda = 2f })) using (Bitmap txt = pil(new Aparencia { AlfaFundo = 245, Barras = false, Onda = 0.5f })) using (Bitmap txt0 = pil(new Aparencia { AlfaFundo = 245, Barras = false })) {
+        Confere("não muda o tamanho da pílula", com.Width == sem.Width && com.Height == sem.Height, true);
+        Confere("muda as cores no meio da barra", Diferentes(sem, com) > 0, true);
+        Confere("fora da barra não muda nada", Diferentes(sem, fora), 0);
+        Confere("no estilo só texto não muda nada", Diferentes(txt0, txt), 0);
+      }
 
       Console.WriteLine("--- Cota por modelo (reset em 84 h: esperado 50)");
       long lidoMs = Agora.AddMinutes(-1).ToUnixTimeMilliseconds();
