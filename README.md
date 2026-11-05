@@ -70,7 +70,7 @@ If the program is blocked, opening falls back to an old PowerShell version (`pil
 - **Hover:** details card.
 - **Click:** switches between accounts.
 - **Drag:** moves it.
-- **Right-click:** accounts, monitor, style (bars or text only), palette, wave on the bars, theme, size, card size, background, font, start with Windows, default look, automatic position, hide for 30 min, close.
+- **Right-click:** accounts, used or what is left, the days that count and this week's days off for each account, monitor, style (bars or text only), palette, wave on the bars, theme, size, card size, background, font, start with Windows, default look, automatic position, hide for 30 min, close.
 
 The pill hides in full screen, avoids the taskbar icons, and comes back on top if the taskbar covers it.
 
@@ -80,6 +80,8 @@ The pill hides in full screen, avoids the taskbar icons, and comes back on top i
 - **Bar:** solid up to what you used, light up to the projection, with a tick at what is expected today.
 - **Color:** green if usage is more than 5 points below expected, red if more than 5 above, yellow otherwise.
 - **Projection:** starts from the week's average (`used / elapsed time`) and gradually moves to your typical day, reaching it at 7 days of history. The typical day carries across weeks, counts days without use, and ignores the largest day once there are 3 or more. Color and expected follow the plugin's formula.
+- **Days that count:** each account can count only some weekdays (Monday to Friday for work, for example) and mark days off, like a holiday. Expected only moves on the days that count; the projection and the typical day skip the rest. The plugin's line inside Claude still counts every day.
+- **What is left:** shows 100 minus each number. On the bar, filled is what should be left at the end, light is what is free now, and the tick is what should be free today.
 
 ## What it stores
 

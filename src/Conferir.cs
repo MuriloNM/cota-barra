@@ -188,6 +188,33 @@ namespace CotaBarra {
       Confere("5 h: projeção para na velocidade", V5(L(50, 3, 0), null).Proj5h, 100);
       Confere("5 h: risco no tempo que passou", V5(L(50, 3, 0), null).Esp5h, 40);
 
+      Console.WriteLine("--- Dias que contam (semana de seg 9/11 a seg 16/11, 20% usado)");
+      {
+        DateTimeOffset seg = new DateTimeOffset(new DateTime(2026, 11, 9, 0, 0, 0, DateTimeKind.Local));
+        Func<DateTimeOffset, CotaBarra.Dias, Conta> CD = (agora, d) => Cota.Calcular(new Leitura { Usado = 20, ResetsAt = seg.AddDays(7).ToString("o"), Lido = agora.ToUnixTimeMilliseconds() }, "x", agora, null, d);
+        DateTimeOffset qua = seg.AddDays(2), sab = seg.AddDays(5).AddHours(12);
+        CotaBarra.Dias uteis = CotaBarra.Dias.De("12345", null);
+        Confere("todos os dias: quarta 0h esperado 29%", CD(qua, null).Esperado, 29);
+        Confere("dias úteis: quarta 0h esperado 40%", CD(qua, uteis).Esperado, 40);
+        Confere("dias úteis: no sábado o esperado para em 100%", CD(sab, uteis).Esperado, 100);
+        Confere("dias úteis: projeção pela média de dias que contam", CD(qua, uteis).Projecao, 50);
+        Confere("folga na terça: quarta 0h esperado 25%", CD(qua, CotaBarra.Dias.De("12345", "2026-11-10")).Esperado, 25);
+        Confere("texto: dias úteis", CD(qua, uteis).DiasTxt, "conta seg a sex");
+        Confere("texto: com folga", CD(qua, CotaBarra.Dias.De("12345", "2026-11-10")).DiasTxt, "conta seg a sex · folga ter 10");
+        Confere("texto: todos os dias não escreve nada", CD(qua, CotaBarra.Dias.De("0123456", null)).DiasTxt, "");
+        Confere("dias salvos voltam iguais", CotaBarra.Dias.De("135", null).SemanaTexto(), "135");
+        Confere("texto: dias soltos", CD(qua, CotaBarra.Dias.De("135", null)).DiasTxt, "conta seg, qua, sex");
+      }
+
+      Console.WriteLine("--- Mostrar quanto falta");
+      {
+        Conta e = Desenho.Espelho(new Conta { Usado = 24, Projecao = 56, Esperado = 43, Estado = "ok" });
+        Confere("cheio vira o que sobra no fim", e.Usado, 44);
+        Confere("claro vai até o livre agora", e.Projecao, 76);
+        Confere("risco no esperado livre", e.Esperado, 57);
+        Confere("acima de 100% não fica negativo", Desenho.Espelho(new Conta { Usado = 90, Projecao = 130, Esperado = 50 }).Usado, 0);
+      }
+
       Console.WriteLine("--- Velocidade de agora na semana");
       DateTimeOffset rv = Agora.AddDays(3); long lv = Agora.ToUnixTimeMilliseconds();
       Func<double, double, Ponto> PV = (horas, uso) => new Ponto { Lido = lv - (long)(horas * 3600000), Usado = uso, Reset = rv };

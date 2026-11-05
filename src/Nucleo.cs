@@ -41,6 +41,7 @@ namespace CotaBarra {
   public class Aparencia {
     public string Fonte = "JetBrains Mono", NomePaleta = "tokyo";
     public double Letra = 10; public int AlfaFundo = 1; public bool Claro, Barras = true;
+    public bool Livre;   // mostra quanto falta (100 - usado) em vez do usado
     public float Onda = Desenho.SemOnda;   // onde a onda de cor está na barra: 0 é o começo, 1 é o fim
     public Paleta Cores { get { return Paleta.De(NomePaleta, Claro); } }
   }
@@ -55,11 +56,58 @@ namespace CotaBarra {
     public double Vel5hHora, Acaba5hMin = -1;  // pontos por hora agora, minutos até 100% antes do reset (-1: não acaba)
     public int Proj5h, Esp5h;                  // onde a janela deve fechar nessa velocidade e quanto dela já passou
     public double VelHora = -1;                // semana: pontos por hora nas últimas horas (-1: ainda sem duas leituras)
+    public string Nome = "", DiasTxt = "";     // nome da conta no arquivo; dias que contam, quando não são todos
+    public DateTimeOffset ResetEm;             // fim da semana desta leitura
     public List<Conta> Modelos = new List<Conta>();   // cotas semanais por modelo, como a do Fable; mesma fórmula da geral
     public string Assinatura() { return Rotulo + "|" + Estado + "|" + Cor + "|" + Usado + "|" + Esperado + "|" + Projecao + "|" + Idade + "|" + Uso5h + "|" + Velha5h + "|" + Cota.Inteiro(Acaba5hMin / 5) + "|" + Cota.Inteiro(Vel5hHora) + "|" + string.Join(",", Modelos.ConvertAll(m => m.Assinatura()).ToArray()); }
   }
 
   public class Ponto { public long Lido; public double Usado; public DateTimeOffset Reset; }
+
+  // Dias que contam no ritmo de uma conta: os da semana escolhidos e as folgas marcadas (feriado, por exemplo).
+  // O esperado só anda nesses dias; nos outros, fica parado.
+  public class Dias {
+    public static readonly string[] Nomes = { "dom", "seg", "ter", "qua", "qui", "sex", "sáb" };
+    public bool[] Semana = { true, true, true, true, true, true, true };   // índice: DayOfWeek
+    public HashSet<DateTime> Folgas = new HashSet<DateTime>();
+    public bool Ativo(DateTime dia) { return Semana[(int)dia.DayOfWeek] && !Folgas.Contains(dia.Date); }
+    public bool TodosDaSemana { get { foreach (bool b in Semana) if (!b) return false; return true; } }
+    public string SemanaTexto() {
+      string s = "";
+      for (int i = 0; i < 7; i++) if (Semana[i]) s += i;
+      return s;
+    }
+    public static Dias De(string semana, string folgas) {
+      Dias d = new Dias();
+      if (!string.IsNullOrEmpty(semana)) {
+        bool[] s = new bool[7]; bool algum = false;
+        foreach (char ch in semana) if (ch >= '0' && ch <= '6') { s[ch - '0'] = true; algum = true; }
+        if (algum) d.Semana = s;
+      }
+      if (!string.IsNullOrEmpty(folgas))
+        foreach (string f in folgas.Split(',')) {
+          DateTime dt;
+          if (DateTime.TryParseExact(f.Trim(), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out dt)) d.Folgas.Add(dt.Date);
+        }
+      return d;
+    }
+    // "conta seg a sex · folga seg 9". Vazio quando todos os dias contam.
+    public string Texto(DateTime inicio, DateTime fim) {
+      List<string> partes = new List<string>();
+      if (!TodosDaSemana) {
+        List<int> on = new List<int>();
+        for (int i = 0; i < 7; i++) if (Semana[i]) on.Add(i);
+        bool seguidos = on.Count >= 3 && on[on.Count - 1] - on[0] == on.Count - 1;
+        List<string> nomes = on.ConvertAll(i => Nomes[i]);
+        partes.Add("conta " + (seguidos ? Nomes[on[0]] + " a " + Nomes[on[on.Count - 1]] : string.Join(", ", nomes.ToArray())));
+      }
+      List<DateTime> fs = new List<DateTime>();
+      foreach (DateTime f in Folgas) if (f >= inicio.Date && f < fim && Semana[(int)f.DayOfWeek]) fs.Add(f);
+      fs.Sort();
+      if (fs.Count > 0) partes.Add("folga " + string.Join(", ", fs.ConvertAll(f => Nomes[(int)f.DayOfWeek] + " " + f.Day).ToArray()));
+      return string.Join(" · ", partes.ToArray());
+    }
+  }
 
   // Histórico das leituras, em arquivo próprio: o arquivo de cota guarda só a última e nunca é alterado.
   public static class Historico {
@@ -115,7 +163,8 @@ namespace CotaBarra {
 
     // Dia típico: quantos pontos a pessoa usa num dia, aprendido entre semanas. Conta todo dia desde a primeira
     // leitura, inclusive os sem uso; a partir de 3 dias ignora o maior, para um pico isolado não puxar a previsão.
-    public static double DiaTipico(IList<Ponto> historico, DateTimeOffset agora, out int dias) {
+    public static double DiaTipico(IList<Ponto> historico, DateTimeOffset agora, out int dias) { return DiaTipico(historico, agora, out dias, null); }
+    public static double DiaTipico(IList<Ponto> historico, DateTimeOffset agora, out int dias, Dias contam) {
       dias = 0;
       if (historico == null || historico.Count == 0) return 0;
       List<Ponto> pts = new List<Ponto>(historico);
@@ -131,6 +180,7 @@ namespace CotaBarra {
       }
       List<double> valores = new List<double>();
       for (DateTime d = hoje.AddDays(-1); d > primeiro && valores.Count < 28; d = d.AddDays(-1)) {   // hoje está pela metade; o primeiro dia também
+        if (contam != null && !contam.Ativo(d)) continue;   // dia que não conta não ensina o dia típico
         double v; porDia.TryGetValue(d, out v); valores.Add(v);
       }
       dias = valores.Count;
@@ -226,7 +276,20 @@ namespace CotaBarra {
 
     // Fórmula igual à do plugin.
     public static Conta Calcular(Leitura l, string rotulo, DateTimeOffset agora) { return Calcular(l, rotulo, agora, null); }
-    public static Conta Calcular(Leitura l, string rotulo, DateTimeOffset agora, IList<Ponto> historico) {
+    // Tempo, em ms, dos dias que contam entre dois instantes locais.
+    public static double AtivoMs(DateTime a, DateTime b, Dias d) {
+      double total = 0;
+      for (DateTime dia = a.Date; dia < b; dia = dia.AddDays(1)) {
+        if (!d.Ativo(dia)) continue;
+        DateTime ini = dia < a ? a : dia, fim = dia.AddDays(1) > b ? b : dia.AddDays(1);
+        if (fim > ini) total += (fim - ini).TotalMilliseconds;
+      }
+      return total;
+    }
+    public static readonly Dictionary<string, Dias> DiasPorConta = new Dictionary<string, Dias>();
+
+    public static Conta Calcular(Leitura l, string rotulo, DateTimeOffset agora, IList<Ponto> historico) { return Calcular(l, rotulo, agora, historico, null); }
+    public static Conta Calcular(Leitura l, string rotulo, DateTimeOffset agora, IList<Ponto> historico, Dias contam) {
       Conta c = new Conta { Rotulo = rotulo, Detalhe = rotulo + ": sem leitura ainda. Abra o Claude nesta conta." };
       if (l == null || l.Usado == null || string.IsNullOrEmpty(l.ResetsAt) || l.Lido == null) return c;
       DateTimeOffset reset;
@@ -244,6 +307,17 @@ namespace CotaBarra {
       double usado = l.Usado.Value;
       double resta = (reset - agora).TotalMilliseconds;
       double decorrido = Math.Min(Math.Max(1 - resta / SemanaMs, 0), 1);
+      double restaDias = resta / 86400000;   // dias que ainda contam até o reset
+      c.ResetEm = reset;
+      if (contam != null) {
+        DateTime ini = reset.AddMilliseconds(-SemanaMs).ToLocalTime().DateTime, fim = reset.ToLocalTime().DateTime, ag = agora.ToLocalTime().DateTime;
+        double total = AtivoMs(ini, fim, contam);
+        if (total > 0) {
+          decorrido = Math.Min(Math.Max(AtivoMs(ini, ag, contam) / total, 0), 1);
+          restaDias = AtivoMs(ag, fim, contam) / 86400000;
+        }
+        c.DiasTxt = contam.Texto(ini, fim);
+      }
       double esperado = decorrido * 100;
       double projecao = decorrido > 0.02 ? usado / decorrido : usado;
       double dif = usado - esperado;
@@ -255,11 +329,10 @@ namespace CotaBarra {
       if (historico != null) {
         c.VelHora = VelocidadeHora(historico, l.Lido.Value, usado, reset);
         int diasHist;
-        double porDia = DiaTipico(historico, agora, out diasHist);
+        double porDia = DiaTipico(historico, agora, out diasHist, contam);
         c.DiasHistorico = diasHist;
         if (diasHist > 0) {
           c.VelDia = porDia;
-          double restaDias = resta / 86400000;
           double peso = Math.Min(diasHist / (double)DiasParaConfiar, 1);
           projecao = Math.Max(usado, peso * (usado + porDia * restaDias) + (1 - peso) * projecao);
           if (porDia > 0 && usado < 100 && (100 - usado) / porDia < restaDias) c.DiasAte100 = (100 - usado) / porDia;
@@ -307,6 +380,7 @@ namespace CotaBarra {
     }
 
     // Cotas por modelo guardadas como { lido, janelas: [{ nome, percentUsed, resetsAt }] }. Vencida não aparece.
+    static Dias DiasDe(string conta) { Dias d; return DiasPorConta.TryGetValue(conta, out d) ? d : null; }
     static List<Conta> LerModelos(Dictionary<string, object> json, string conta, DateTimeOffset agora) {
       List<Conta> l = new List<Conta>();
       object o;
@@ -319,7 +393,7 @@ namespace CotaBarra {
         object nome, usado, reset;
         if (j == null || !j.TryGetValue("nome", out nome) || !j.TryGetValue("percentUsed", out usado) || !j.TryGetValue("resetsAt", out reset)) continue;
         try {
-          Conta m = Calcular(new Leitura { Usado = Convert.ToDouble(usado, CultureInfo.InvariantCulture), ResetsAt = Convert.ToString(reset, CultureInfo.InvariantCulture), Lido = Convert.ToInt64(lido, CultureInfo.InvariantCulture) }, Convert.ToString(nome, CultureInfo.InvariantCulture), agora);
+          Conta m = Calcular(new Leitura { Usado = Convert.ToDouble(usado, CultureInfo.InvariantCulture), ResetsAt = Convert.ToString(reset, CultureInfo.InvariantCulture), Lido = Convert.ToInt64(lido, CultureInfo.InvariantCulture) }, Convert.ToString(nome, CultureInfo.InvariantCulture), agora, null, DiasDe(conta));
           if (m.Estado == "ok" || m.Estado == "velha") l.Add(m);
         } catch { }
       }
@@ -338,7 +412,8 @@ namespace CotaBarra {
       foreach (string n in nomes) {
         Leitura l = Extrair(json, "ultima:" + n);
         if (usarHistorico) Historico.Registrar(n, l);
-        Conta c = Calcular(l, RotuloDe(n), agora, usarHistorico ? Historico.De(n) : null);
+        Conta c = Calcular(l, RotuloDe(n), agora, usarHistorico ? Historico.De(n) : null, DiasDe(n));
+        c.Nome = n;
         // Janela de 5 h, se o arquivo trouxer. Quem não tem essa janela no plano segue só com a semana.
         Leitura l5 = Extrair(json, "cinco_horas:" + n);
         if (l5 == null && usarHistorico) {
@@ -396,7 +471,25 @@ namespace CotaBarra {
 
     static bool TemNumero(Conta c) { return c.Estado == "ok" || c.Estado == "velha"; }
 
-    static Seg Segmentos(Conta c, bool rotulo, bool compacto, bool barras) {
+    // Visão do que falta: os números viram 100 menos eles, e a barra se espelha. Cheio é o que deve sobrar no fim,
+    // claro é o que está livre agora e o risco é o que deveria estar livre hoje.
+    static int Falta(int p) { return Math.Max(0, 100 - p); }
+    public static Conta Espelho(Conta c) {
+      return new Conta { Usado = Falta(c.Projecao), Projecao = Falta(c.Usado), Esperado = Falta(c.Esperado), Estado = c.Estado, Cor = c.Cor };
+    }
+    static Seg Segmentos(Conta c, bool rotulo, bool compacto, bool barras) { return Segmentos(c, rotulo, compacto, barras, false); }
+    static Seg Segmentos(Conta c, bool rotulo, bool compacto, bool barras, bool livre) {
+      if (livre) {
+        Seg sl = Segmentos(c, rotulo, compacto, barras, false);
+        if (!TemNumero(c)) return sl;
+        sl.Usado = Falta(c.Usado) + "%";
+        if (!compacto) {
+          sl.Resto = barras ? "→ " + Falta(c.Projecao) + "%" : "/ " + Falta(c.Esperado) + "% → " + Falta(c.Projecao) + "%";
+          if (c.Tem5h) sl.Cinco = "5h " + Falta(c.Uso5h) + "%" + (!c.Velha5h && Cota.Inteiro(c.Vel5hHora) > 0 ? " -" + Cota.Inteiro(c.Vel5hHora) + "/h" : "");
+          if (c.Modelos.Count > 0) sl.Modelo = c.Modelos[0].Rotulo.ToLowerInvariant() + " " + Falta(c.Modelos[0].Usado) + "%";
+        }
+        return sl;
+      }
       Seg s = new Seg { Conta = c, Rotulo = rotulo ? c.Rotulo.ToLowerInvariant() : "" };
       if (!TemNumero(c)) {
         s.Usado = "--";
@@ -535,7 +628,7 @@ namespace CotaBarra {
       using (StringFormat fmt = (StringFormat)StringFormat.GenericTypographic.Clone()) {
         fmt.FormatFlags |= StringFormatFlags.MeasureTrailingSpaces | StringFormatFlags.NoWrap;
         List<Seg> linhas = new List<Seg>();
-        foreach (Conta c in lista) linhas.Add(Segmentos(c, duas, compacto, a.Barras));
+        foreach (Conta c in lista) linhas.Add(Segmentos(c, duas, compacto, a.Barras, a.Livre));
         int Celulas = a.Letra < 9 ? 14 : 20;   // no menor tamanho, a barra também encurta
         int cel = Math.Max(2, (int)(px * 0.30)), vaoCel = Math.Max(1, (int)(px * 0.10));
         bool algumaBarra = false;
@@ -585,7 +678,7 @@ namespace CotaBarra {
                 int altoBarra = (int)(px * 0.62);
                 float ondaLinha = a.Onda == SemOnda ? SemOnda : a.Onda - i * 0.08f;   // a segunda linha vem um pouco atrás
                 // A onda é a própria cor da barra, realçada: verde, amarela ou vermelha, conforme o ritmo agora.
-                Barra(g, xB, (int)(y + (altLinha - altoBarra) / 2), cel, vaoCel, altoBarra, Celulas, c, cor, trilha, p.Texto, ondaLinha, Misturar(cor, p.Texto, 0.65f));
+                Barra(g, xB, (int)(y + (altLinha - altoBarra) / 2), cel, vaoCel, altoBarra, Celulas, a.Livre ? Espelho(c) : c, cor, trilha, p.Texto, ondaLinha, Misturar(cor, p.Texto, 0.65f));
               }
               if (s.Rotulo.Length > 0) g.DrawString(s.Rotulo, fNormal, bFraco, x1, y, fmt);
               if (s.Resto.Length > 0) g.DrawString(s.Resto, fNormal, ok ? bForte : bFraco, x3, y, fmt);
@@ -612,9 +705,10 @@ namespace CotaBarra {
         fmt.FormatFlags |= StringFormatFlags.MeasureTrailingSpaces | StringFormatFlags.NoWrap;
         int pad = (int)(14 * esc), entre = (int)(14 * esc), n = 36, cel = (int)(6 * esc), vao = Math.Max(1, (int)(1.5 * esc)), altoBarra = (int)(9 * esc);
         int wBarra = LarguraBarra(cel, vao, n);
-        const string Legenda = "cheio: usado · claro: projeção · risco: esperado";
+        bool livre = a.Livre;
+        string Legenda = livre ? "cheio: sobra no fim · claro: livre agora · risco: esperado livre" : "cheio: usado · claro: projeção · risco: esperado";
         Func<Conta, string> linha5h = c => {
-          string t = "5h: " + c.Uso5h + "%" + (!c.Velha5h && c.Vel5hHora > 0 ? " · " + c.Vel5hHora.ToString("0.0", CultureInfo.GetCultureInfo("pt-BR")) + " pts/h" : "") + " · reseta em " + c.Reset5hTxt;
+          string t = "5h: " + (livre ? Falta(c.Uso5h) + "% livre" : c.Uso5h + "%") + (!c.Velha5h && c.Vel5hHora > 0 ? " · " + c.Vel5hHora.ToString("0.0", CultureInfo.GetCultureInfo("pt-BR")) + " pts/h" : "") + " · reseta em " + c.Reset5hTxt;
           if (c.Velha5h) return t + " · leitura velha";
           if (c.Acaba5hMin >= 0) return t + " · " + TextoAcaba5h(c.Acaba5hMin);
           return t;
@@ -636,7 +730,9 @@ namespace CotaBarra {
           if (c.DiasHistorico < Cota.DiasParaConfiar) return v;
           return v + " · pela média: " + c.ProjecaoMedia + "%";
         };
-        Func<Conta, string> linhaModelo = m => m.Rotulo.ToLowerInvariant() + ": " + m.Usado + "% · esperado " + m.Esperado + "% · projeção " + m.Projecao + "%";
+        Func<Conta, string> linhaModelo = m => livre
+          ? m.Rotulo.ToLowerInvariant() + ": " + Falta(m.Usado) + "% livre · esperado " + Falta(m.Esperado) + "% · no fim " + Falta(m.Projecao) + "%"
+          : m.Rotulo.ToLowerInvariant() + ": " + m.Usado + "% · esperado " + m.Esperado + "% · projeção " + m.Projecao + "%";
         int larg = wBarra, alt;
         float hN, hP;
         using (Bitmap med = new Bitmap(1, 1)) using (Graphics gm = Graphics.FromImage(med)) {
@@ -645,13 +741,14 @@ namespace CotaBarra {
             larg = Math.Max(larg, Medir(gm, linhaRitmo(c), fN, fmt));
             if (TemNumero(c)) larg = Math.Max(larg, Medir(gm, linhaVel(c), fN, fmt));
             if (c.Tem5h) larg = Math.Max(larg, Medir(gm, linha5h(c), fN, fmt));
+            if (TemNumero(c) && c.DiasTxt.Length > 0) larg = Math.Max(larg, Medir(gm, c.DiasTxt, fN, fmt));
             foreach (Conta m in c.Modelos) larg = Math.Max(larg, Medir(gm, linhaModelo(m), fN, fmt));
           }
           larg = Math.Max(larg, Medir(gm, Legenda, fP, fmt));
         }
         alt = pad * 2 + (int)(hP + 10 * esc);
         foreach (Conta c in lista)
-          alt += (int)(hN * 2) + (int)(4 * esc) + entre + (TemNumero(c) ? (int)(hN * 2) + altoBarra + (int)(8 * esc) : 0) + (c.Tem5h ? (int)hN + altoBarra + (int)(10 * esc) : 0) + c.Modelos.Count * (int)hN;
+          alt += (int)(hN * 2) + (int)(4 * esc) + entre + (TemNumero(c) ? (int)(hN * 2) + altoBarra + (int)(8 * esc) + (c.DiasTxt.Length > 0 ? (int)hN : 0) : 0) + (c.Tem5h ? (int)hN + altoBarra + (int)(10 * esc) : 0) + c.Modelos.Count * (int)hN;
         alt -= entre;
         int w = larg + pad * 2;
         Bitmap bmp = new Bitmap(w, alt, PixelFormat.Format32bppPArgb);
@@ -670,11 +767,13 @@ namespace CotaBarra {
               }
               y += hN + (int)(4 * esc);
               if (TemNumero(c)) {
-                Barra(g, pad, (int)y, cel, vao, altoBarra, n, c, cor, p.Superficie, p.Texto);
+                Barra(g, pad, (int)y, cel, vao, altoBarra, n, livre ? Espelho(c) : c, cor, p.Superficie, p.Texto);
                 y += altoBarra + (int)(6 * esc);
                 using (SolidBrush bC = new SolidBrush(cor)) {
                   float x = pad;
-                  string u = c.Usado + "% usado", e = c.Esperado + "% esperado", q = c.Projecao + "% projeção";
+                  string u = livre ? Falta(c.Usado) + "% livre" : c.Usado + "% usado";
+                  string e = (livre ? Falta(c.Esperado) : c.Esperado) + "% esperado";
+                  string q = livre ? Falta(c.Projecao) + "% no fim" : c.Projecao + "% projeção";
                   g.DrawString(u, fF, bC, x, y, fmt);
                   x = pad + (larg - Medir(g, e, fN, fmt)) / 2f;
                   g.DrawString(e, fN, bW, x, y, fmt);
@@ -686,11 +785,16 @@ namespace CotaBarra {
               }
               g.DrawString(linhaRitmo(c), fN, c.Estado == "velha" ? bA : bW, pad, y, fmt);
               y += hN;
+              if (TemNumero(c) && c.DiasTxt.Length > 0) {
+                g.DrawString(c.DiasTxt, fN, bW, pad, y, fmt);
+                y += hN;
+              }
               if (c.Tem5h) {
                 // Mesma leitura da barra da semana: cheio é o usado, claro é onde a janela fecha, risco é o tempo que passou.
                 y += (int)(4 * esc);
                 string ritmo5h = c.Acaba5hMin >= 0 ? "vermelho" : c.Uso5h - c.Esp5h > 5 ? "amarelo" : "verde";
-                Barra(g, pad, (int)y, cel, vao, altoBarra, n, new Conta { Usado = c.Uso5h, Projecao = c.Proj5h, Esperado = c.Esp5h }, c.Velha5h ? p.Fraco : p.DoRitmo(ritmo5h), p.Superficie, p.Texto);
+                Conta j5 = new Conta { Usado = c.Uso5h, Projecao = c.Proj5h, Esperado = c.Esp5h };
+                Barra(g, pad, (int)y, cel, vao, altoBarra, n, livre ? Espelho(j5) : j5, c.Velha5h ? p.Fraco : p.DoRitmo(ritmo5h), p.Superficie, p.Texto);
                 y += altoBarra + (int)(6 * esc);
                 g.DrawString(linha5h(c), fN, c.Velha5h ? bW : c.Acaba5hMin >= 0 ? bA : bT, pad, y, fmt);
                 y += hN;

@@ -242,7 +242,7 @@ namespace CotaBarra {
     List<string> fontes;
 
     string vista = "ambas"; int? manual;
-    string tema = "auto", paleta = PaletaPadrao, estilo = EstiloPadrao, tamanho = TamanhoPadrao, tamanhoCartao = CartaoPadrao, fundo = FundoPadrao, fonte = "JetBrains Mono", monitor;   // monitor null = o principal
+    string tema = "auto", paleta = PaletaPadrao, estilo = EstiloPadrao, tamanho = TamanhoPadrao, tamanhoCartao = CartaoPadrao, fundo = FundoPadrao, fonte = "JetBrains Mono", monitor, mostrar = "usado";   // monitor null = o principal
     DateTime escondidaAte = DateTime.MinValue, ultimaVarredura = DateTime.MinValue, ultimoDado = DateTime.MinValue;
     int widgetsDir, bandejaUia; int? iconesEsq, iconesDir;
     string assinatura = "";
@@ -308,14 +308,53 @@ namespace CotaBarra {
         if (d.TryGetValue("deslocManual", out o) && o != null) manual = Convert.ToInt32(o);
         vista = Texto(d, "vista", vista); tema = Texto(d, "tema", tema); paleta = Texto(d, "paleta", paleta); estilo = Texto(d, "estilo", estilo);
         tamanho = Texto(d, "tamanho", tamanho); tamanhoCartao = Texto(d, "tamanhoCartao", tamanhoCartao); fundo = Texto(d, "fundo", fundo); fonte = Texto(d, "fonte", fonte); monitor = Texto(d, "monitor", monitor); onda = Texto(d, "onda", onda);
+        mostrar = Texto(d, "mostrar", mostrar);
+        // Dias que contam e folgas, por conta: "dias:<conta>" = "12345" (0 = domingo), "folgas:<conta>" = "2026-11-09,..."
+        Dictionary<string, string[]> porConta = new Dictionary<string, string[]>();
+        foreach (KeyValuePair<string, object> kv in d) {
+          if (!(kv.Value is string)) continue;
+          int sep = kv.Key.IndexOf(':');
+          if (sep < 0) continue;
+          string tipo = kv.Key.Substring(0, sep), conta = kv.Key.Substring(sep + 1);
+          if (tipo != "dias" && tipo != "folgas") continue;
+          string[] v;
+          if (!porConta.TryGetValue(conta, out v)) { v = new string[2]; porConta[conta] = v; }
+          v[tipo == "dias" ? 0 : 1] = (string)kv.Value;
+        }
+        Cota.DiasPorConta.Clear();
+        foreach (KeyValuePair<string, string[]> kv in porConta) Cota.DiasPorConta[kv.Key] = Dias.De(kv.Value[0], kv.Value[1]);
       } catch { }
+    }
+    Dias DiasConta(string conta) {
+      Dias d;
+      if (!Cota.DiasPorConta.TryGetValue(conta, out d)) { d = new Dias(); Cota.DiasPorConta[conta] = d; }
+      return d;
+    }
+    void AlternarDia(string conta, int dia) {
+      Dias d = DiasConta(conta);
+      d.Semana[dia] = !d.Semana[dia];
+      if (d.SemanaTexto().Length == 0) d.Semana[dia] = true;   // pelo menos um dia conta
+      SalvarConfig(); Atualizar(true);
+    }
+    void AlternarFolga(string conta, DateTime dia) {
+      Dias d = DiasConta(conta);
+      if (!d.Folgas.Remove(dia.Date)) d.Folgas.Add(dia.Date);
+      SalvarConfig(); Atualizar(true);
     }
     static string Texto(Dictionary<string, object> d, string chave, string padrao) { object o; return d.TryGetValue(chave, out o) && o is string ? (string)o : padrao; }
     void SalvarConfig() {
       try {
         Directory.CreateDirectory(Pasta);
         Dictionary<string, object> d = new Dictionary<string, object>();
-        d["vista"] = vista; d["deslocManual"] = manual; d["tema"] = tema; d["paleta"] = paleta; d["estilo"] = estilo; d["tamanho"] = tamanho; d["tamanhoCartao"] = tamanhoCartao; d["fundo"] = fundo; d["fonte"] = fonte; d["monitor"] = monitor; d["onda"] = onda;
+        d["vista"] = vista; d["deslocManual"] = manual; d["tema"] = tema; d["paleta"] = paleta; d["estilo"] = estilo; d["tamanho"] = tamanho; d["tamanhoCartao"] = tamanhoCartao; d["fundo"] = fundo; d["fonte"] = fonte; d["monitor"] = monitor; d["onda"] = onda; d["mostrar"] = mostrar;
+        DateTime corte = DateTime.Today.AddDays(-10);   // folga de semana que já passou não serve mais
+        foreach (KeyValuePair<string, Dias> kv in Cota.DiasPorConta) {
+          if (!kv.Value.TodosDaSemana) d["dias:" + kv.Key] = kv.Value.SemanaTexto();
+          List<string> fs = new List<string>();
+          foreach (DateTime f in kv.Value.Folgas) if (f >= corte) fs.Add(f.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture));
+          fs.Sort();
+          if (fs.Count > 0) d["folgas:" + kv.Key] = string.Join(",", fs.ToArray());
+        }
         File.WriteAllText(Path.Combine(Pasta, "pilula.json"), new JavaScriptSerializer().Serialize(d), new UTF8Encoding(true));   // com BOM, para a versão em PowerShell ler os acentos
       } catch { }
     }
@@ -339,6 +378,27 @@ namespace CotaBarra {
       sc.Chips.Add(Opcao(contas.Count == 2 ? "as duas" : "todas", "ambas", () => vista, v => vista = v));
       foreach (Conta c in contas) sc.Chips.Add(Opcao(c.Rotulo.ToLowerInvariant(), c.Rotulo, () => vista, v => vista = v));
       l.Add(sc);
+      l.Add(Grupo("mostrar", () => mostrar, v => mostrar = v, "usado", "usado", "livre", "quanto falta"));
+      // Por conta: os dias que contam no esperado e as folgas desta semana, como um feriado.
+      foreach (Conta c in contas) {
+        if (string.IsNullOrEmpty(c.Nome)) continue;
+        string nome = c.Nome, rot = c.Rotulo.ToLowerInvariant();
+        Secao sd = new Secao { Titulo = "dias que contam · " + rot };
+        foreach (int dia in new[] { 1, 2, 3, 4, 5, 6, 0 }) {
+          int k = dia;
+          sd.Chips.Add(new Chip { Texto = Dias.Nomes[k], Ativo = () => DiasConta(nome).Semana[k], Acao = delegate { AlternarDia(nome, k); } });
+        }
+        l.Add(sd);
+        if (c.ResetEm == default(DateTimeOffset)) continue;
+        Secao sf = new Secao { Titulo = "folga nesta semana · " + rot };
+        DateTime ini = c.ResetEm.AddDays(-7).ToLocalTime().Date, fim = c.ResetEm.ToLocalTime().DateTime;
+        for (DateTime dt = ini; dt < fim; dt = dt.AddDays(1)) {
+          DateTime k = dt;
+          if (!DiasConta(nome).Semana[(int)k.DayOfWeek]) continue;
+          sf.Chips.Add(new Chip { Texto = Dias.Nomes[(int)k.DayOfWeek] + " " + k.Day, Ativo = () => DiasConta(nome).Folgas.Contains(k), Acao = delegate { AlternarFolga(nome, k); } });
+        }
+        if (sf.Chips.Count > 0) l.Add(sf);
+      }
       l.Add(MontarMonitores());
       l.Add(Grupo("estilo", () => estilo, v => estilo = v, "barras", "barras", "texto", "só texto"));
       l.Add(Grupo("paleta", () => paleta, v => paleta = v, "tokyo", "tokyo night", "catppuccin", "catppuccin", "terminal", "terminal"));
@@ -355,7 +415,7 @@ namespace CotaBarra {
       Secao acoes = new Secao { Titulo = "ações" };
       acoes.Chips.Add(new Chip { Texto = "abrir com o windows", Ativo = AbreComWindows, Acao = delegate { MudarInicio(!AbreComWindows()); } });
       acoes.Chips.Add(new Chip { Texto = "visual padrão", Acao = delegate {
-        tema = "auto"; paleta = PaletaPadrao; estilo = EstiloPadrao; tamanho = TamanhoPadrao; tamanhoCartao = CartaoPadrao; fundo = FundoPadrao; fonte = "JetBrains Mono"; onda = "0"; proximaOnda = DateTime.MinValue; SalvarConfig(); Atualizar(true);
+        tema = "auto"; paleta = PaletaPadrao; estilo = EstiloPadrao; tamanho = TamanhoPadrao; tamanhoCartao = CartaoPadrao; mostrar = "usado"; fundo = FundoPadrao; fonte = "JetBrains Mono"; onda = "0"; proximaOnda = DateTime.MinValue; SalvarConfig(); Atualizar(true);
       } });
       acoes.Chips.Add(new Chip { Texto = "posição automática", Acao = delegate { manual = null; SalvarConfig(); Atualizar(true); } });
       acoes.Chips.Add(new Chip { Texto = "esconder 30 min", Acao = delegate { escondidaAte = DateTime.Now.AddMinutes(30); if (painel != null) painel.Encerrar(); AtualizarVisibilidade(); } });
@@ -409,6 +469,7 @@ namespace CotaBarra {
     }
     Aparencia AparenciaAtual() {
       Aparencia a = new Aparencia { Fonte = fonte, NomePaleta = paleta, Barras = estilo != "texto" };
+      a.Livre = mostrar == "livre";
       a.Letra = tamanho == "minima" ? 8 : tamanho == "pequena" ? 10 : tamanho == "media" ? 11 : tamanho == "grande" ? 13.5 : 12;
       a.AlfaFundo = fundo == "transparente" ? 1 : fundo == "translucido" ? 150 : 245;
       a.Claro = tema == "claro" || (tema == "auto" && WindowsClaro());
