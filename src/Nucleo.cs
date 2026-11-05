@@ -395,7 +395,7 @@ namespace CotaBarra {
     public static Bitmap Cartao(IList<Conta> lista, double esc, Aparencia a) {
       Paleta p = a.Cores;
       float px = (float)(13 * esc);
-      string fonte = FonteMono(a.Fonte);
+      string fonte = FonteMono(null);   // a fonte escolhida vale só para a pílula; o cartão fica sempre igual
       using (Font fN = new Font(fonte, px, FontStyle.Regular, GraphicsUnit.Pixel))
       using (Font fF = new Font(fonte, px, FontStyle.Bold, GraphicsUnit.Pixel))
       using (Font fP = new Font(fonte, (float)(11 * esc), FontStyle.Regular, GraphicsUnit.Pixel))

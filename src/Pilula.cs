@@ -150,7 +150,8 @@ namespace CotaBarra {
       base.OnHandleCreated(e);
       int redondo = 2; Nativo.DwmSetWindowAttribute(Handle, 33, ref redondo, 4);   // cantos e sombra do Windows 11
     }
-    Font Fonte(FontStyle st, double tam) { return new Font(Desenho.FonteMono(aparencia().Fonte), (float)(tam * esc), st, GraphicsUnit.Pixel); }
+    // A fonte escolhida vale só para a pílula; o painel fica sempre igual.
+    Font Fonte(FontStyle st, double tam) { return new Font(Desenho.FonteMono(null), (float)(tam * esc), st, GraphicsUnit.Pixel); }
 
     void Dispor() {
       int largura = D(470), xChips = D(96), pad = D(14), alturaChip = D(26), vaoChip = D(6), y = D(44);
