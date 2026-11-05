@@ -177,6 +177,18 @@ namespace CotaBarra {
       Confere("leitura de 40 min: velha", V5(L(40, 3, 40), null).Velha5h, true);
       Confere("leitura velha: não prevê", V5(L(50, 3, 40), null).Acaba5hMin, -1);
       Confere("texto do fim", Desenho.TextoAcaba5h(80), "acaba em 1 h 20");
+      Confere("5 h: projeção para na velocidade", V5(L(50, 3, 0), null).Proj5h, 100);
+      Confere("5 h: risco no tempo que passou", V5(L(50, 3, 0), null).Esp5h, 40);
+
+      Console.WriteLine("--- Velocidade de agora na semana");
+      DateTimeOffset rv = Agora.AddDays(3); long lv = Agora.ToUnixTimeMilliseconds();
+      Func<double, double, Ponto> PV = (horas, uso) => new Ponto { Lido = lv - (long)(horas * 3600000), Usado = uso, Reset = rv };
+      Confere("sem histórico: sem velocidade", Cota.VelocidadeHora(new List<Ponto>(), lv, 20, rv), -1.0);
+      Confere("menos de 10 min: sem velocidade", Cota.VelocidadeHora(new List<Ponto> { PV(0.1, 19) }, lv, 20, rv), -1.0);
+      Confere("não espera dias: 4 pts em 2 h", Cota.VelocidadeHora(new List<Ponto> { PV(2, 16) }, lv, 20, rv), 2.0);
+      Confere("usa a leitura mais antiga da janela", Cota.VelocidadeHora(new List<Ponto> { PV(10, 1), PV(2, 16), PV(1, 18) }, lv, 20, rv), 2.0);
+      Confere("parado há horas: zero", Cota.VelocidadeHora(new List<Ponto> { PV(8, 20) }, lv, 20, rv), 0.0);
+      Confere("ignora a semana anterior", Cota.VelocidadeHora(new List<Ponto> { new Ponto { Lido = lv - 3600000, Usado = 90, Reset = rv.AddDays(-7) } }, lv, 20, rv), -1.0);
       string tmp5 = Path.Combine(Path.GetTempPath(), "cota-barra-teste-" + Guid.NewGuid().ToString("N") + ".json");
       File.WriteAllText(tmp5, "{\"ultima:padrao\":{\"percentUsed\":18,\"resetsAt\":\"2026-11-09T19:00:00Z\",\"lido\":1793835996553},\"cinco_horas:padrao\":{\"percentUsed\":40,\"resetsAt\":\"2026-11-05T02:00:00Z\",\"lido\":1793835996553}}");
       Confere("lê a janela de 5 h do arquivo", Cota.Contas(Agora, tmp5)[0].Uso5h, 40);

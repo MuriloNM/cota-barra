@@ -53,8 +53,10 @@ namespace CotaBarra {
     // Janela de 5 h: só existe se o arquivo trouxer. No plano sem essa janela, nada disso aparece.
     public bool Tem5h, Velha5h; public int Uso5h; public string Reset5hTxt = "";
     public double Vel5hHora, Acaba5hMin = -1;  // pontos por hora agora, minutos até 100% antes do reset (-1: não acaba)
+    public int Proj5h, Esp5h;                  // onde a janela deve fechar nessa velocidade e quanto dela já passou
+    public double VelHora = -1;                // semana: pontos por hora nas últimas horas (-1: ainda sem duas leituras)
     public List<Conta> Modelos = new List<Conta>();   // cotas semanais por modelo, como a do Fable; mesma fórmula da geral
-    public string Assinatura() { return Rotulo + "|" + Estado + "|" + Cor + "|" + Usado + "|" + Esperado + "|" + Projecao + "|" + Idade + "|" + Uso5h + "|" + Velha5h + "|" + Cota.Inteiro(Acaba5hMin / 5) + "|" + string.Join(",", Modelos.ConvertAll(m => m.Assinatura()).ToArray()); }
+    public string Assinatura() { return Rotulo + "|" + Estado + "|" + Cor + "|" + Usado + "|" + Esperado + "|" + Projecao + "|" + Idade + "|" + Uso5h + "|" + Velha5h + "|" + Cota.Inteiro(Acaba5hMin / 5) + "|" + Cota.Inteiro(Vel5hHora) + "|" + string.Join(",", Modelos.ConvertAll(m => m.Assinatura()).ToArray()); }
   }
 
   public class Ponto { public long Lido; public double Usado; public DateTimeOffset Reset; }
@@ -140,6 +142,23 @@ namespace CotaBarra {
       return soma / usar;
     }
 
+    // Velocidade de agora na semana: desde a leitura mais antiga das últimas horas. Leitura igual não é gravada, então,
+    // se não houver nenhuma nesse intervalo, vale a última anterior a ele. Menos de 10 min não diz nada: -1.
+    public const double JanelaVelHoras = 3;
+    public static double VelocidadeHora(IList<Ponto> historico, long lido, double usado, DateTimeOffset reset) {
+      if (historico == null) return -1;
+      long inicio = lido - (long)(JanelaVelHoras * 3600000);
+      Ponto dentro = null, antes = null;
+      foreach (Ponto p in historico) {
+        if (p.Lido >= lido || Math.Abs((p.Reset - reset).TotalMinutes) > 5) continue;
+        if (p.Lido >= inicio) { if (dentro == null || p.Lido < dentro.Lido) dentro = p; }
+        else if (antes == null || p.Lido > antes.Lido) antes = p;
+      }
+      Ponto base1 = dentro ?? antes;
+      if (base1 == null || lido - base1.Lido < 10 * 60000) return -1;
+      return Math.Max(usado - base1.Usado, 0) / ((lido - base1.Lido) / 3600000.0);
+    }
+
     // Janela de 5 h: a velocidade de agora é a da última hora; sem ela, a média desde o início da janela.
     public const double Janela5hHoras = 5;
     public static void Calcular5h(Conta c, Leitura l, DateTimeOffset agora, IList<Ponto> historico) {
@@ -148,7 +167,8 @@ namespace CotaBarra {
       if (!DateTimeOffset.TryParse(l.ResetsAt, CultureInfo.InvariantCulture, DateTimeStyles.None, out reset) || reset <= agora) return;
       long agoraMs = agora.ToUnixTimeMilliseconds();
       double usado = l.Usado.Value, restaH = (reset - agora).TotalHours;
-      c.Tem5h = true; c.Uso5h = Inteiro(usado);
+      c.Tem5h = true; c.Uso5h = Inteiro(usado); c.Proj5h = c.Uso5h;
+      c.Esp5h = Inteiro(Math.Min(Math.Max((Janela5hHoras - restaH) / Janela5hHoras, 0), 1) * 100);
       int restaMin = (int)Math.Ceiling(restaH * 60);
       c.Reset5hTxt = restaMin < 60 ? restaMin + " min" : (restaMin / 60) + " h " + (restaMin % 60).ToString("00");
       c.Velha5h = agoraMs - l.Lido.Value > 30 * 60000;   // velha aqui é bem mais cedo que na semana
@@ -169,6 +189,7 @@ namespace CotaBarra {
       }
       if (porHora < 0) return;
       c.Vel5hHora = porHora;
+      c.Proj5h = Inteiro(Math.Max(Math.Min(usado + porHora * restaH, 100), usado));
       if (usado >= 100) { c.Acaba5hMin = 0; return; }
       if (porHora > 0 && (100 - usado) / porHora < restaH) c.Acaba5hMin = (100 - usado) / porHora * 60;
     }
@@ -232,6 +253,7 @@ namespace CotaBarra {
 
       // Dia típico aprendido: o peso cresce com os dias de histórico, para a projeção sair da média sem dar saltos.
       if (historico != null) {
+        c.VelHora = VelocidadeHora(historico, l.Lido.Value, usado, reset);
         int diasHist;
         double porDia = DiaTipico(historico, agora, out diasHist);
         c.DiasHistorico = diasHist;
@@ -386,7 +408,7 @@ namespace CotaBarra {
       s.TemBarra = barras;
       s.Resto = barras ? "→ " + c.Projecao + "%" : "/ " + c.Esperado + "% → " + c.Projecao + "%";
       s.Idade = c.Estado == "velha" ? "velha " + c.Idade : c.Idade;
-      if (c.Tem5h) s.Cinco = "5h " + c.Uso5h + "%";
+      if (c.Tem5h) s.Cinco = "5h " + c.Uso5h + "%" + (!c.Velha5h && Cota.Inteiro(c.Vel5hHora) > 0 ? " " + Cota.Inteiro(c.Vel5hHora) + "/h" : "");
       if (c.Modelos.Count > 0) { s.ContaModelo = c.Modelos[0]; s.Modelo = c.Modelos[0].Rotulo.ToLowerInvariant() + " " + c.Modelos[0].Usado + "%"; }
       return s;
     }
@@ -592,7 +614,7 @@ namespace CotaBarra {
         int wBarra = LarguraBarra(cel, vao, n);
         const string Legenda = "cheio: usado · claro: projeção · risco: esperado";
         Func<Conta, string> linha5h = c => {
-          string t = "5h: " + c.Uso5h + "% · reseta em " + c.Reset5hTxt;
+          string t = "5h: " + c.Uso5h + "%" + (!c.Velha5h && c.Vel5hHora > 0 ? " · " + c.Vel5hHora.ToString("0.0", CultureInfo.GetCultureInfo("pt-BR")) + " pts/h" : "") + " · reseta em " + c.Reset5hTxt;
           if (c.Velha5h) return t + " · leitura velha";
           if (c.Acaba5hMin >= 0) return t + " · " + TextoAcaba5h(c.Acaba5hMin);
           return t;
@@ -607,10 +629,11 @@ namespace CotaBarra {
         };
         CultureInfo br = CultureInfo.GetCultureInfo("pt-BR");
         Func<Conta, string> linhaVel = c => {
-          if (c.DiasHistorico == 0) return "dia típico: aprendendo, projeção pela média";
-          string v = "dia típico " + c.VelDia.ToString("0.0", br) + " pts";
+          string agora = c.VelHora >= 0 ? "agora " + c.VelHora.ToString("0.0", br) + " pts/h" : "velocidade: falta mais uma leitura";
+          if (c.DiasHistorico == 0) return agora + " · projeção pela média";
+          string v = agora + " · dia típico " + c.VelDia.ToString("0.0", br) + " pts";
           if (c.DiasAte100 >= 0) return v + " · 100% em " + c.DiasAte100.ToString("0.0", br) + " dias";
-          if (c.DiasHistorico < Cota.DiasParaConfiar) return v + " · aprendendo, " + c.DiasHistorico + " de " + Cota.DiasParaConfiar + " dias";
+          if (c.DiasHistorico < Cota.DiasParaConfiar) return v;
           return v + " · pela média: " + c.ProjecaoMedia + "%";
         };
         Func<Conta, string> linhaModelo = m => m.Rotulo.ToLowerInvariant() + ": " + m.Usado + "% · esperado " + m.Esperado + "% · projeção " + m.Projecao + "%";
@@ -628,7 +651,7 @@ namespace CotaBarra {
         }
         alt = pad * 2 + (int)(hP + 10 * esc);
         foreach (Conta c in lista)
-          alt += (int)(hN * 2) + (int)(4 * esc) + entre + (TemNumero(c) ? (int)(hN * 2) + altoBarra + (int)(8 * esc) : 0) + (c.Tem5h ? (int)hN : 0) + c.Modelos.Count * (int)hN;
+          alt += (int)(hN * 2) + (int)(4 * esc) + entre + (TemNumero(c) ? (int)(hN * 2) + altoBarra + (int)(8 * esc) : 0) + (c.Tem5h ? (int)hN + altoBarra + (int)(10 * esc) : 0) + c.Modelos.Count * (int)hN;
         alt -= entre;
         int w = larg + pad * 2;
         Bitmap bmp = new Bitmap(w, alt, PixelFormat.Format32bppPArgb);
@@ -664,6 +687,11 @@ namespace CotaBarra {
               g.DrawString(linhaRitmo(c), fN, c.Estado == "velha" ? bA : bW, pad, y, fmt);
               y += hN;
               if (c.Tem5h) {
+                // Mesma leitura da barra da semana: cheio é o usado, claro é onde a janela fecha, risco é o tempo que passou.
+                y += (int)(4 * esc);
+                string ritmo5h = c.Acaba5hMin >= 0 ? "vermelho" : c.Uso5h - c.Esp5h > 5 ? "amarelo" : "verde";
+                Barra(g, pad, (int)y, cel, vao, altoBarra, n, new Conta { Usado = c.Uso5h, Projecao = c.Proj5h, Esperado = c.Esp5h }, c.Velha5h ? p.Fraco : p.DoRitmo(ritmo5h), p.Superficie, p.Texto);
+                y += altoBarra + (int)(6 * esc);
                 g.DrawString(linha5h(c), fN, c.Velha5h ? bW : c.Acaba5hMin >= 0 ? bA : bT, pad, y, fmt);
                 y += hN;
               }

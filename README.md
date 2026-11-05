@@ -85,9 +85,9 @@ The pill hides in full screen, avoids the taskbar icons, and comes back on top i
 
 Only in `%LOCALAPPDATA%\cota-barra`: preferences and a history of readings (percentages and dates, up to 56 days).
 
-## In testing
+## The 5-hour window and per-model quota
 
-Per-model quota and the 5-hour window are already drawn, but the plugin does not save that data yet, so they do not appear in this version.
+If the plan has them, they show up with plugin 0.8 or newer. The card shows the 5-hour window as a bar: filled is used, light is where the window should close at the current speed, and the tick is how much time has passed.
 
 ## For developers
 

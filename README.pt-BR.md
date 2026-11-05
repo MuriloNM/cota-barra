@@ -77,9 +77,9 @@ A pílula some em tela cheia, foge dos ícones da barra e volta para cima se a b
 
 Só em `%LOCALAPPDATA%\cota-barra`: preferências e histórico das leituras (percentuais e datas, por até 56 dias).
 
-## Em teste
+## Janela de 5 h e cota por modelo
 
-A cota por modelo e a janela de 5 h já são desenhadas, mas o plugin ainda não grava esses dados, então não aparecem nesta versão.
+Se o plano tiver, elas aparecem com o plugin 0.8 ou mais novo. O cartão mostra a janela de 5 h em barra: cheio é o usado, claro é onde a janela deve fechar na velocidade atual, e o risco é o tempo que já passou.
 
 ## Para quem for mexer
 
