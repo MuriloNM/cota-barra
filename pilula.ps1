@@ -71,7 +71,7 @@ function Update-Pilula {
         if (-not $Forcar -and $sig -eq $script:Assinatura) { return }
         $script:Assinatura = $sig
 
-        $script:Dica.SetToolTip($script:Forma, (($lista | ForEach-Object { $_.Detalhe }) -join "`n`n"))
+        $script:TextoDica = ($lista | ForEach-Object { $_.Detalhe }) -join "`n`n"
 
         $margem = [int](8 * $esc)
         $alt = $r.Height - 2 * [int](4 * $esc)
@@ -124,7 +124,14 @@ function Close-Pilula {
 $script:Forma = New-Object CotaBarra.FormaPilula
 $script:Forma.Text = 'Cota da semana'
 $script:Dica = New-Object Windows.Forms.ToolTip
-$script:Dica.ShowAlways = $true; $script:Dica.InitialDelay = 300; $script:Dica.AutoPopDelay = 15000
+$script:Dica.ShowAlways = $true
+$script:TextoDica = ''
+# A dica abre acima da pílula, para não cobrir o texto dela nem a bandeja.
+$script:Forma.Add_MouseEnter({
+    $alto = [Windows.Forms.TextRenderer]::MeasureText($script:TextoDica, [Drawing.SystemFonts]::StatusFont).Height + 24
+    $script:Dica.Show($script:TextoDica, $script:Forma, 0, -$alto, 15000)
+})
+$script:Forma.Add_MouseLeave({ $script:Dica.Hide($script:Forma) })
 
 $script:Menu = New-Object Windows.Forms.ContextMenuStrip
 $script:ItemAmbas = $script:Menu.Items.Add('Mostrar as duas contas'); $script:ItemAmbas.Add_Click({ Set-Vista 'ambas' })
@@ -170,6 +177,7 @@ $script:TimerArrasto.Add_Tick({
 })
 $script:Forma.Add_MouseDown({
     param($s, $e)
+    $script:Dica.Hide($script:Forma)
     if ($e.Button -eq 'Left') {
         $script:Arrasto = @{ Inicio = [Windows.Forms.Cursor]::Position.X; X0 = $script:PosAtual.X; XAtual = $script:PosAtual.X; Moveu = $false }
         $script:TimerArrasto.Start()

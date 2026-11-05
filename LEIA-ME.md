@@ -1,5 +1,7 @@
 # cota-barra (protótipo)
 
+**Escolhida:** a pílula (Murilo, 04/11/2026). A bandeja fica no repositório, fechada.
+
 Mostra a cota semanal do Claude fora do Claude, no Windows 11. Dois formatos para escolher:
 
 | | Abrir | Fechar |
