@@ -13,7 +13,7 @@ Também dá para fechar pelo botão direito. Para a pílula abrir com o Windows,
 
 ## Como usar
 
-- **Pílula:** clique alterna entre as duas contas e cada uma sozinha; arrastar muda o lugar; passar o mouse abre o cartão de detalhe. O botão direito abre o painel de ajustes: contas, monitor, estilo (barras ou só texto), paleta (Tokyo Night, Catppuccin, Terminal), onda de cor nas barras (desligada, 30 s, 1 min, 5 min, 15 min), tema (igual ao Windows, escuro, claro), tamanho, fundo (sólido, translúcido, transparente), fonte (as de largura fixa instaladas e a Segoe UI), abrir com o Windows, visual padrão (pequeno, transparente e com barras), posição automática, esconder 30 min e fechar. Tudo fica salvo em `%LOCALAPPDATA%\cota-barra\pilula.json`.
+- **Pílula:** clique alterna entre as duas contas e cada uma sozinha; arrastar muda o lugar; passar o mouse abre o cartão de detalhe. O botão direito abre o painel de ajustes: contas, monitor, estilo (barras ou só texto), paleta (Tokyo Night, Catppuccin, Terminal), onda nas barras (desligada por padrão; 5 s a 15 min; 3 pontos, na cor atual da barra), tema (igual ao Windows, escuro, claro), tamanho, fundo (sólido, translúcido, transparente), fonte (as de largura fixa instaladas e a Segoe UI), abrir com o Windows, visual padrão (pequeno, transparente e com barras), posição automática, esconder 30 min e fechar. Tudo fica salvo em `%LOCALAPPDATA%\cota-barra\pilula.json`.
 - **Bandeja:** um ícone por conta (Padrão = quadrado, Trabalho = círculo). O Windows põe ícones novos na área oculta (`^`): arraste os dois para a barra.
 
 ## Como é feita
