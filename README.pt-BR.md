@@ -72,12 +72,12 @@ A pílula some em tela cheia, foge dos ícones da barra e volta para cima se a b
 - **Barra:** cheia até o usado, clara até a projeção, com um risco no esperado de hoje.
 - **Cor:** verde se o uso está mais de 5 pontos abaixo do esperado, vermelho se está mais de 5 acima, amarelo no resto.
 - **Projeção:** começa pela média da semana (`usado / tempo decorrido`) e passa aos poucos para o dia típico, até 7 dias de histórico. O dia típico atravessa as semanas, conta dias sem uso e ignora o maior a partir de 3 dias. A cor e o esperado seguem a fórmula do plugin.
-- **Dias que contam:** cada conta pode contar só alguns dias da semana (de segunda a sexta no trabalho, por exemplo) e marcar folgas, como um feriado. O esperado só anda nos dias que contam; a projeção e o dia típico ignoram os outros. A linha do plugin dentro do Claude ainda conta todos os dias.
+- **Dias que contam:** cada conta pode contar só alguns dias da semana (de segunda a sexta no trabalho, por exemplo) e marcar folgas, como um feriado. O esperado só anda nos dias que contam; a projeção e o dia típico ignoram os outros. O ajuste é o mesmo do plugin (0.10 ou mais novo), que também tem `/cota dias seg-sex` e `/cota folga 10/11`, então a linha dentro do Claude segue os mesmos dias.
 - **Quanto falta:** mostra 100 menos cada número. Na barra, cheio é o que deve sobrar no fim, claro é o que está livre agora, e o risco é o que deveria estar livre hoje.
 
 ## O que fica guardado
 
-Só em `%LOCALAPPDATA%\cota-barra`: preferências e histórico das leituras (percentuais e datas, por até 56 dias).
+Em `%LOCALAPPDATA%\cota-barra`: preferências e histórico das leituras (percentuais e datas, por até 56 dias). Em `%USERPROFILE%\.cota-barra\dias.json`: os dias que contam e as folgas, em comum com o plugin.
 
 ## Janela de 5 h e cota por modelo
 

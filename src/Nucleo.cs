@@ -288,6 +288,56 @@ namespace CotaBarra {
     }
     public static readonly Dictionary<string, Dias> DiasPorConta = new Dictionary<string, Dias>();
 
+    // Os dias que contam ficam em ~/.cota-barra/dias.json, um por conta, para o plugin (/cota dias) e a pílula
+    // lerem e gravarem o mesmo arquivo. Fora de AppData, porque o Claude da Microsoft Store desvia o que grava ali.
+    public static string ArquivoDias() {
+      string teste = Environment.GetEnvironmentVariable("COTA_DIAS");   // só para testar
+      return !string.IsNullOrEmpty(teste) ? teste : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), @".cota-barra\dias.json");
+    }
+    static DateTime diasLidoEm = DateTime.MinValue;
+    // Relê só quando o arquivo muda. Sem arquivo, fica o que já está na memória.
+    public static bool CarregarDias() {
+      string a = ArquivoDias();
+      try {
+        if (!File.Exists(a)) return false;
+        DateTime d = File.GetLastWriteTimeUtc(a);
+        if (d == diasLidoEm) return true;
+        Dictionary<string, object> j = new JavaScriptSerializer().DeserializeObject(File.ReadAllText(a)) as Dictionary<string, object>;
+        if (j == null) return true;
+        diasLidoEm = d;
+        DiasPorConta.Clear();
+        foreach (KeyValuePair<string, object> kv in j) {
+          Dictionary<string, object> o = kv.Value as Dictionary<string, object>;
+          if (o == null) continue;
+          object s, f;
+          string semana = o.TryGetValue("semana", out s) ? s as string : null;
+          List<string> folgas = new List<string>();
+          if (o.TryGetValue("folgas", out f) && f is object[]) foreach (object x in (object[])f) if (x is string) folgas.Add((string)x);
+          DiasPorConta[kv.Key] = Dias.De(semana, string.Join(",", folgas.ToArray()));
+        }
+      } catch { }
+      return true;
+    }
+    public static void GravarDias() {
+      try {
+        DateTime corte = DateTime.Today.AddDays(-10);   // folga de semana que já passou não serve mais
+        Dictionary<string, object> j = new Dictionary<string, object>();
+        foreach (KeyValuePair<string, Dias> kv in DiasPorConta) {
+          Dictionary<string, object> o = new Dictionary<string, object>();
+          if (!kv.Value.TodosDaSemana) o["semana"] = kv.Value.SemanaTexto();
+          List<string> fs = new List<string>();
+          foreach (DateTime f in kv.Value.Folgas) if (f >= corte) fs.Add(f.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+          fs.Sort();
+          if (fs.Count > 0) o["folgas"] = fs.ToArray();
+          if (o.Count > 0) j[kv.Key] = o;
+        }
+        string a = ArquivoDias();
+        Directory.CreateDirectory(Path.GetDirectoryName(a));
+        File.WriteAllText(a, new JavaScriptSerializer().Serialize(j), new System.Text.UTF8Encoding(false));
+        diasLidoEm = File.GetLastWriteTimeUtc(a);
+      } catch { }
+    }
+
     public static Conta Calcular(Leitura l, string rotulo, DateTimeOffset agora, IList<Ponto> historico) { return Calcular(l, rotulo, agora, historico, null); }
     public static Conta Calcular(Leitura l, string rotulo, DateTimeOffset agora, IList<Ponto> historico, Dias contam) {
       Conta c = new Conta { Rotulo = rotulo, Detalhe = rotulo + ": sem leitura ainda. Abra o Claude nesta conta." };
@@ -404,6 +454,7 @@ namespace CotaBarra {
     static string RotuloDe(string nome) { return nome == "padrao" ? "Padrão" : nome; }
     public static List<Conta> Contas(DateTimeOffset agora, string caminho) { return Contas(agora, caminho, false); }
     static List<Conta> Contas(DateTimeOffset agora, string caminho, bool usarHistorico) {
+      if (usarHistorico) CarregarDias();   // o /cota dias do plugin pode ter mudado o arquivo
       Dictionary<string, object> json = string.IsNullOrEmpty(caminho) ? null : LerArquivo(caminho);
       List<string> nomes = new List<string>();
       if (json != null) foreach (string k in json.Keys) if (k.StartsWith("ultima:", StringComparison.Ordinal)) nomes.Add(k.Substring(7));

@@ -328,9 +328,11 @@ namespace CotaBarra {
           if (!porConta.TryGetValue(conta, out v)) { v = new string[2]; porConta[conta] = v; }
           v[tipo == "dias" ? 0 : 1] = (string)kv.Value;
         }
+        // A 0.1.4 guardava os dias aqui; agora eles vivem no arquivo que o plugin também usa. Sem ele, migra.
         Cota.DiasPorConta.Clear();
         foreach (KeyValuePair<string, string[]> kv in porConta) Cota.DiasPorConta[kv.Key] = Dias.De(kv.Value[0], kv.Value[1]);
       } catch { }
+      if (!Cota.CarregarDias() && Cota.DiasPorConta.Count > 0) Cota.GravarDias();
     }
     Dias DiasConta(string conta) {
       Dias d;
@@ -354,14 +356,7 @@ namespace CotaBarra {
         Directory.CreateDirectory(Pasta);
         Dictionary<string, object> d = new Dictionary<string, object>();
         d["vista"] = vista; d["deslocManual"] = manual; d["tema"] = tema; d["paleta"] = paleta; d["estilo"] = estilo; d["tamanho"] = tamanho; d["tamanhoCartao"] = tamanhoCartao; d["fundo"] = fundo; d["fonte"] = fonte; d["monitor"] = monitor; d["onda"] = onda; d["mostrar"] = mostrar;
-        DateTime corte = DateTime.Today.AddDays(-10);   // folga de semana que já passou não serve mais
-        foreach (KeyValuePair<string, Dias> kv in Cota.DiasPorConta) {
-          if (!kv.Value.TodosDaSemana) d["dias:" + kv.Key] = kv.Value.SemanaTexto();
-          List<string> fs = new List<string>();
-          foreach (DateTime f in kv.Value.Folgas) if (f >= corte) fs.Add(f.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture));
-          fs.Sort();
-          if (fs.Count > 0) d["folgas:" + kv.Key] = string.Join(",", fs.ToArray());
-        }
+        Cota.GravarDias();
         File.WriteAllText(Path.Combine(Pasta, "pilula.json"), new JavaScriptSerializer().Serialize(d), new UTF8Encoding(true));   // com BOM, para a versão em PowerShell ler os acentos
       } catch { }
     }

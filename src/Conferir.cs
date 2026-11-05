@@ -206,6 +206,26 @@ namespace CotaBarra {
         Confere("texto: dias soltos", CD(qua, CotaBarra.Dias.De("135", null)).DiasTxt, "conta seg, qua, sex");
       }
 
+      Console.WriteLine("--- Arquivo de dias (o mesmo do plugin)");
+      {
+        string tmpD = Path.Combine(Path.GetTempPath(), "cota-barra-dias-" + Guid.NewGuid().ToString("N") + ".json");
+        Environment.SetEnvironmentVariable("COTA_DIAS", tmpD);
+        Confere("sem arquivo: avisa que não leu", Cota.CarregarDias(), false);
+        File.WriteAllText(tmpD, "{\"Trabalho\":{\"semana\":\"12345\",\"folgas\":[\"2026-11-10\"]},\"padrao\":{}}");
+        Confere("lê o arquivo do plugin", Cota.CarregarDias(), true);
+        Confere("dias da conta", Cota.DiasPorConta["Trabalho"].SemanaTexto(), "12345");
+        Confere("folga da conta", Cota.DiasPorConta["Trabalho"].Folgas.Contains(new DateTime(2026, 11, 10)), true);
+        Confere("conta sem ajuste: todos os dias", Cota.DiasPorConta["padrao"].TodosDaSemana, true);
+        Cota.DiasPorConta["Trabalho"].Semana[1] = false;
+        Cota.GravarDias();
+        string gravado = File.ReadAllText(tmpD);
+        Confere("grava no formato do plugin", gravado.Contains("\"Trabalho\":{\"semana\":\"2345\""), true);
+        Confere("conta sem ajuste não ocupa espaço", gravado.Contains("padrao"), false);
+        File.Delete(tmpD);
+        Environment.SetEnvironmentVariable("COTA_DIAS", null);
+        Cota.DiasPorConta.Clear();
+      }
+
       Console.WriteLine("--- Mostrar quanto falta");
       {
         Conta e = Desenho.Espelho(new Conta { Usado = 24, Projecao = 56, Esperado = 43, Estado = "ok" });
