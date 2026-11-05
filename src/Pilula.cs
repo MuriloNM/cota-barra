@@ -1,8 +1,10 @@
 // A pílula sobre a barra de tarefas.
-// Clique: alterna as contas. Arrastar: muda de lugar. Botão direito: menu.
+// Clique: alterna as contas. Arrastar: muda de lugar. Mouse em cima: cartão de detalhe. Botão direito: painel de ajustes.
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Drawing.Drawing2D;
+using System.Drawing.Text;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -27,6 +29,7 @@ namespace CotaBarra {
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr h, StringBuilder s, int n);
     [DllImport("user32.dll")] static extern IntPtr MonitorFromWindow(IntPtr h, uint f);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern bool GetMonitorInfo(IntPtr m, ref MONITORINFO i);
+    [DllImport("dwmapi.dll")] public static extern int DwmSetWindowAttribute(IntPtr h, int a, ref int v, int s);
 
     public static IntPtr Barra() { return FindWindow("Shell_TrayWnd", null); }
     public static string Dispositivo(IntPtr h) {
@@ -81,7 +84,7 @@ namespace CotaBarra {
     public void Dispose() { UnhookWinEvent(gancho); }
   }
 
-  // Janela sem borda, sempre visível, que não rouba o foco e tem bordas suaves.
+  // Janela sem borda, sempre visível, que não rouba o foco e tem bordas suaves. O cartão também deixa o mouse atravessar.
   class FormaPilula : Form {
     [StructLayout(LayoutKind.Sequential)] struct PT { public int x, y; public PT(int a, int b) { x = a; y = b; } }
     [StructLayout(LayoutKind.Sequential)] struct SZ { public int w, h; public SZ(int a, int b) { w = a; h = b; } }
@@ -95,10 +98,19 @@ namespace CotaBarra {
     [DllImport("gdi32.dll")] static extern bool DeleteObject(IntPtr o);
     [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr h, IntPtr a, int x, int y, int cx, int cy, uint f);
 
-    public FormaPilula() { FormBorderStyle = FormBorderStyle.None; ShowInTaskbar = false; StartPosition = FormStartPosition.Manual; AutoScaleMode = AutoScaleMode.None; Text = "Cota da semana"; }
+    readonly bool atravessar;
+    public FormaPilula(bool atravessarMouse) {
+      atravessar = atravessarMouse;
+      FormBorderStyle = FormBorderStyle.None; ShowInTaskbar = false; StartPosition = FormStartPosition.Manual; AutoScaleMode = AutoScaleMode.None; Text = "Cota da semana";
+    }
     protected override bool ShowWithoutActivation { get { return true; } }
     protected override CreateParams CreateParams {
-      get { CreateParams c = base.CreateParams; c.ExStyle |= 0x00080000 | 0x00000080 | 0x08000000 | 0x00000008; return c; }  // LAYERED, TOOLWINDOW, NOACTIVATE, TOPMOST
+      get {
+        CreateParams c = base.CreateParams;
+        c.ExStyle |= 0x00080000 | 0x00000080 | 0x08000000 | 0x00000008;  // LAYERED, TOOLWINDOW, NOACTIVATE, TOPMOST
+        if (atravessar) c.ExStyle |= 0x00000020;                          // TRANSPARENT
+        return c;
+      }
     }
     protected override void WndProc(ref Message m) {
       if (m.Msg == 0x21) { m.Result = new IntPtr(3); return; }  // WM_MOUSEACTIVATE: não ativar
@@ -116,50 +128,134 @@ namespace CotaBarra {
     public void Reforcar() { SetWindowPos(Handle, new IntPtr(-1), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010); }
   }
 
+  class Chip { public string Texto; public Func<bool> Ativo; public Action Acao; public bool Perigo; public Rectangle R; }
+  class Secao { public string Titulo; public List<Chip> Chips = new List<Chip>(); }
+
+  // Painel de ajustes no lugar do menu branco do Windows. Cada clique vale na hora; clicar fora ou Esc fecha.
+  class PainelAjustes : Form {
+    readonly Func<List<Secao>> montar; readonly Func<Aparencia> aparencia; readonly Action<PainelAjustes> posicionar; readonly double esc;
+    List<Secao> secoes; Chip sobre; bool fechando;
+
+    public PainelAjustes(Func<List<Secao>> montarSecoes, Func<Aparencia> ap, Action<PainelAjustes> pos, double escala) {
+      montar = montarSecoes; aparencia = ap; posicionar = pos; esc = escala;
+      FormBorderStyle = FormBorderStyle.None; ShowInTaskbar = false; StartPosition = FormStartPosition.Manual; AutoScaleMode = AutoScaleMode.None;
+      TopMost = true; DoubleBuffered = true; KeyPreview = true; Text = "Ajustes da cota";
+      secoes = montar(); Dispor();
+      Deactivate += delegate { Encerrar(); };
+      KeyDown += delegate(object s, KeyEventArgs e) { if (e.KeyCode == Keys.Escape) Encerrar(); };
+    }
+    int D(double v) { return (int)(v * esc); }
+    public void Encerrar() { if (fechando) return; fechando = true; Close(); }
+    protected override void OnHandleCreated(EventArgs e) {
+      base.OnHandleCreated(e);
+      int redondo = 2; Nativo.DwmSetWindowAttribute(Handle, 33, ref redondo, 4);   // cantos e sombra do Windows 11
+    }
+    Font Fonte(FontStyle st, double tam) { return new Font(Desenho.FonteMono(aparencia().Fonte), (float)(tam * esc), st, GraphicsUnit.Pixel); }
+
+    void Dispor() {
+      int largura = D(470), xChips = D(96), pad = D(14), alturaChip = D(26), vaoChip = D(6), y = D(44);
+      using (Font f = Fonte(FontStyle.Regular, 12.5)) using (Graphics g = CreateGraphics()) {
+        foreach (Secao s in secoes) {
+          int x = xChips;
+          foreach (Chip c in s.Chips) {
+            int w = TextRenderer.MeasureText(g, c.Texto, f, Size.Empty, TextFormatFlags.NoPadding).Width + D(18);
+            if (x + w > largura - pad && x > xChips) { x = xChips; y += alturaChip + vaoChip; }
+            c.R = new Rectangle(x, y, w, alturaChip);
+            x += w + vaoChip;
+          }
+          y += alturaChip + D(10);
+        }
+      }
+      ClientSize = new Size(largura, y + D(4));
+      string teste = Environment.GetEnvironmentVariable("COTA_TESTE");
+      if (!string.IsNullOrEmpty(teste) && IsHandleCreated) {
+        StringBuilder sb = new StringBuilder();
+        foreach (Secao s in secoes) foreach (Chip c in s.Chips) {
+          Rectangle t = RectangleToScreen(c.R);
+          sb.AppendLine(s.Titulo + "|" + c.Texto + "|" + (t.X + t.Width / 2) + "|" + (t.Y + t.Height / 2));
+        }
+        File.WriteAllText(teste, sb.ToString(), new UTF8Encoding(true));
+      }
+    }
+    public void Refazer() { secoes = montar(); Dispor(); posicionar(this); Dispor(); Invalidate(); }
+
+    protected override void OnPaint(PaintEventArgs e) {
+      Aparencia ap = aparencia(); Paleta p = ap.Cores; Graphics g = e.Graphics;
+      g.Clear(p.Fundo); g.SmoothingMode = SmoothingMode.AntiAlias; g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
+      using (Font fT = Fonte(FontStyle.Bold, 14)) using (Font fN = Fonte(FontStyle.Regular, 12.5))
+      using (SolidBrush bD = new SolidBrush(p.Destaque)) using (SolidBrush bW = new SolidBrush(p.Fraco)) using (SolidBrush bX = new SolidBrush(p.Texto)) using (Pen borda = new Pen(Color.FromArgb(150, p.Destaque))) {
+        g.DrawRectangle(borda, 0, 0, ClientSize.Width - 1, ClientSize.Height - 1);
+        g.DrawString("> ajustes", fT, bD, D(14), D(11));
+        string esq = "esc fecha";
+        g.DrawString(esq, fN, bW, ClientSize.Width - D(14) - g.MeasureString(esq, fN).Width, D(12));
+        foreach (Secao s in secoes) {
+          if (s.Chips.Count == 0) continue;
+          g.DrawString(s.Titulo, fN, bW, D(14), s.Chips[0].R.Y + D(4));
+          foreach (Chip c in s.Chips) {
+            bool ativo = c.Ativo != null && c.Ativo();
+            Color fundo = ativo ? p.Destaque : c == sobre ? Color.FromArgb(Math.Min(255, p.Superficie.R + 22), Math.Min(255, p.Superficie.G + 22), Math.Min(255, p.Superficie.B + 22)) : p.Superficie;
+            using (GraphicsPath cam = Arredondado(c.R, D(4))) using (SolidBrush b = new SolidBrush(fundo)) g.FillPath(b, cam);
+            Color txt = ativo ? p.Fundo : c.Perigo ? p.Vermelho : p.Texto;
+            TextRenderer.DrawText(g, c.Texto, fN, c.R, txt, fundo, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
+          }
+        }
+      }
+    }
+    static GraphicsPath Arredondado(Rectangle r, int raio) {
+      int d = raio * 2; GraphicsPath c = new GraphicsPath();
+      c.AddArc(r.X, r.Y, d, d, 180, 90); c.AddArc(r.Right - d - 1, r.Y, d, d, 270, 90);
+      c.AddArc(r.Right - d - 1, r.Bottom - d - 1, d, d, 0, 90); c.AddArc(r.X, r.Bottom - d - 1, d, d, 90, 90); c.CloseFigure();
+      return c;
+    }
+    Chip ChipEm(Point pt) { foreach (Secao s in secoes) foreach (Chip c in s.Chips) if (c.R.Contains(pt)) return c; return null; }
+    protected override void OnMouseMove(MouseEventArgs e) {
+      Chip c = ChipEm(e.Location);
+      if (c != sobre) { sobre = c; Cursor = c != null ? Cursors.Hand : Cursors.Default; Invalidate(); }
+      base.OnMouseMove(e);
+    }
+    protected override void OnMouseLeave(EventArgs e) { sobre = null; Invalidate(); base.OnMouseLeave(e); }
+    protected override void OnMouseClick(MouseEventArgs e) {
+      Chip c = ChipEm(e.Location);
+      if (c != null && e.Button == MouseButtons.Left) { sobre = null; c.Acao(); if (!fechando && !IsDisposed) Refazer(); }
+      base.OnMouseClick(e);
+    }
+  }
+
   class Aplicacao {
     static readonly string Pasta = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "cota-barra");
     static readonly string[] Ordem = { "ambas", "Padrão", "Trabalho" };
+    // O padrão é o visual que o Murilo escolheu em 04/11/2026: pequeno e transparente.
+    const string TamanhoPadrao = "pequena", FundoPadrao = "transparente", EstiloPadrao = "barras", PaletaPadrao = "tokyo";
 
-    readonly FormaPilula forma = new FormaPilula();
-    readonly ToolTip dica = new ToolTip { ShowAlways = true };
-    readonly ContextMenuStrip menu = new ContextMenuStrip();
+    readonly FormaPilula forma = new FormaPilula(false);
+    readonly FormaPilula cartao = new FormaPilula(true);
     readonly Temporizador relogio = new Temporizador { Interval = 5000 };
     readonly Temporizador gatilho = new Temporizador { Interval = 200 };
     readonly Temporizador arrasto = new Temporizador { Interval = 30 };
     readonly EventWaitHandle sinalFechar;
     Vigia vigia;
-    ToolStripMenuItem itemAmbas, itemPad, itemTrab;
+    PainelAjustes painel;
+    List<string> fontes;
 
     string vista = "ambas"; int? manual;
-    // O padrão é o visual que o Murilo escolheu em 04/11/2026: pequeno e transparente.
-    const string TamanhoPadrao = "pequena", FundoPadrao = "transparente";
-    string tema = "auto", tamanho = TamanhoPadrao, fundo = FundoPadrao, fonte = "JetBrains Mono", monitor;   // monitor null = o principal
-    ToolStripMenuItem subMonitor, subFonte;
-    readonly List<Action> marcas = new List<Action>();
+    string tema = "auto", paleta = PaletaPadrao, estilo = EstiloPadrao, tamanho = TamanhoPadrao, fundo = FundoPadrao, fonte = "JetBrains Mono", monitor;   // monitor null = o principal
     DateTime escondidaAte = DateTime.MinValue, ultimaVarredura = DateTime.MinValue, ultimoDado = DateTime.MinValue;
     int widgetsDir, bandejaUia; int? iconesEsq, iconesDir;
-    string assinatura = "", textoDica = "";
+    string assinatura = "";
+    List<Conta> listaAtual = new List<Conta>();
     bool visivel;
     // Posição atual
-    int posX, posY, posL, posMargem, posBandeja; Rectangle posBarra;
+    int posX, posY, posL, posH, posMargem, posBandeja; Rectangle posBarra; double posEsc = 1;
     // Arrasto
     bool arrastando, moveu; int arrInicio, arrX0, arrXAtual;
 
     Aplicacao(EventWaitHandle sinal) {
       sinalFechar = sinal;
       LerConfig();
-      MontarMenu();
-      forma.MouseEnter += delegate {
-        int alto = TextRenderer.MeasureText(textoDica, SystemFonts.StatusFont).Height + 24;
-        dica.Show(textoDica, forma, 0, -alto, 15000);   // acima da pílula, sem cobrir o texto nem a bandeja
-      };
-      forma.MouseLeave += delegate { dica.Hide(forma); };
+      forma.MouseEnter += delegate { MostrarCartao(); };
+      forma.MouseLeave += delegate { EsconderCartao(); };
       forma.MouseDown += AoPressionar;
-      forma.MouseUp += delegate(object s, MouseEventArgs e) {
-        if (e.Button != MouseButtons.Right) return;
-        Nativo.SetForegroundWindow(forma.Handle);   // o menu só fecha ao clicar fora com o processo em primeiro plano
-        menu.Show(Cursor.Position);
-      };
+      forma.MouseUp += delegate(object s, MouseEventArgs e) { if (e.Button == MouseButtons.Right) AbrirPainel(); };
       arrasto.Tick += delegate { AoArrastar(); };
       gatilho.Tick += delegate {
         gatilho.Stop();
@@ -182,20 +278,17 @@ namespace CotaBarra {
       try {
         Dictionary<string, object> d = new JavaScriptSerializer().DeserializeObject(File.ReadAllText(Path.Combine(Pasta, "pilula.json"))) as Dictionary<string, object>;
         object o;
-        if (d.TryGetValue("vista", out o) && o is string) vista = (string)o;
         if (d.TryGetValue("deslocManual", out o) && o != null) manual = Convert.ToInt32(o);
-        if (d.TryGetValue("tema", out o) && o is string) tema = (string)o;
-        if (d.TryGetValue("tamanho", out o) && o is string) tamanho = (string)o;
-        if (d.TryGetValue("fundo", out o) && o is string) fundo = (string)o;
-        if (d.TryGetValue("fonte", out o) && o is string) fonte = (string)o;
-        if (d.TryGetValue("monitor", out o) && o is string) monitor = (string)o;
+        vista = Texto(d, "vista", vista); tema = Texto(d, "tema", tema); paleta = Texto(d, "paleta", paleta); estilo = Texto(d, "estilo", estilo);
+        tamanho = Texto(d, "tamanho", tamanho); fundo = Texto(d, "fundo", fundo); fonte = Texto(d, "fonte", fonte); monitor = Texto(d, "monitor", monitor);
       } catch { }
     }
+    static string Texto(Dictionary<string, object> d, string chave, string padrao) { object o; return d.TryGetValue(chave, out o) && o is string ? (string)o : padrao; }
     void SalvarConfig() {
       try {
         Directory.CreateDirectory(Pasta);
         Dictionary<string, object> d = new Dictionary<string, object>();
-        d["vista"] = vista; d["deslocManual"] = manual; d["tema"] = tema; d["tamanho"] = tamanho; d["fundo"] = fundo; d["fonte"] = fonte; d["monitor"] = monitor;
+        d["vista"] = vista; d["deslocManual"] = manual; d["tema"] = tema; d["paleta"] = paleta; d["estilo"] = estilo; d["tamanho"] = tamanho; d["fundo"] = fundo; d["fonte"] = fonte; d["monitor"] = monitor;
         File.WriteAllText(Path.Combine(Pasta, "pilula.json"), new JavaScriptSerializer().Serialize(d), new UTF8Encoding(true));   // com BOM, para a versão em PowerShell ler os acentos
       } catch { }
     }
@@ -203,84 +296,72 @@ namespace CotaBarra {
       try { Directory.CreateDirectory(Pasta); File.AppendAllText(Path.Combine(Pasta, "pilula.log"), DateTime.Now.ToString("s") + " " + t + Environment.NewLine); } catch { }
     }
 
-    void MontarMenu() {
-      itemAmbas = new ToolStripMenuItem("As duas", null, delegate { MudarVista("ambas"); });
-      itemPad = new ToolStripMenuItem("Só Padrão", null, delegate { MudarVista("Padrão"); });
-      itemTrab = new ToolStripMenuItem("Só Trabalho", null, delegate { MudarVista("Trabalho"); });
-      ToolStripMenuItem subContas = new ToolStripMenuItem("Contas");
-      subContas.DropDownItems.AddRange(new ToolStripItem[] { itemAmbas, itemPad, itemTrab });
-      subMonitor = new ToolStripMenuItem("Monitor");
-      subFonte = new ToolStripMenuItem("Fonte");
-      menu.Items.Add(subContas);
-      menu.Items.Add(subMonitor);
-      menu.Items.Add(new ToolStripSeparator());
-      menu.Items.Add(Opcoes("Tema", new[] { "auto", "Igual ao Windows", "escuro", "Escuro", "claro", "Claro" }, () => tema, v => tema = v));
-      menu.Items.Add(Opcoes("Tamanho", new[] { "pequena", "Pequeno", "media", "Médio", "normal", "Normal", "grande", "Grande" }, () => tamanho, v => tamanho = v));
-      menu.Items.Add(Opcoes("Fundo", new[] { "opaco", "Sólido", "translucido", "Translúcido", "transparente", "Transparente" }, () => fundo, v => fundo = v));
-      menu.Items.Add(subFonte);
-      menu.Items.Add("Voltar ao visual padrão", null, delegate {
-        tema = "auto"; tamanho = TamanhoPadrao; fundo = FundoPadrao; fonte = "JetBrains Mono";
-        foreach (Action m in marcas) m();
-        SalvarConfig(); Atualizar(true);
-      });
-      menu.Items.Add(new ToolStripSeparator());
-      menu.Items.Add("Esconder por 30 min", null, delegate { escondidaAte = DateTime.Now.AddMinutes(30); AtualizarVisibilidade(); });
-      menu.Items.Add("Voltar à posição automática", null, delegate { manual = null; SalvarConfig(); Atualizar(true); });
-      ToolStripMenuItem itemInicio = new ToolStripMenuItem("Abrir com o Windows", null, delegate { MudarInicio(!AbreComWindows()); });
-      menu.Items.Add(itemInicio);
-      menu.Opening += delegate { itemInicio.Checked = AbreComWindows(); };
-      menu.Items.Add(new ToolStripSeparator());
-      menu.Items.Add("Fechar", null, delegate { Fechar(); });
-      // Monitores podem entrar e sair: a lista é refeita a cada abertura. As fontes, só na primeira.
-      menu.Opening += delegate { MontarMonitores(); if (subFonte.DropDownItems.Count == 0) MontarFontes(); };
-      subMonitor.DropDownItems.Add("-");   // para aparecer a seta do submenu
-      subFonte.DropDownItems.Clear();
-      MarcarMenu();
+    // ---------- Painel de ajustes ----------
+    Chip Opcao(string texto, string valor, Func<string> ler, Action<string> gravar) {
+      return new Chip { Texto = texto, Ativo = () => ler() == valor, Acao = delegate { gravar(valor); SalvarConfig(); Atualizar(true); } };
     }
-    void MarcarMenu() { itemAmbas.Checked = vista == "ambas"; itemPad.Checked = vista == "Padrão"; itemTrab.Checked = vista == "Trabalho"; }
-    void MudarVista(string v) { vista = v; SalvarConfig(); MarcarMenu(); Atualizar(true); }
-
-    // Submenu de escolha única. pares = valor, rótulo, valor, rótulo...
-    ToolStripMenuItem Opcoes(string titulo, string[] pares, Func<string> ler, Action<string> gravar) {
-      ToolStripMenuItem sub = new ToolStripMenuItem(titulo);
-      List<ToolStripMenuItem> itens = new List<ToolStripMenuItem>();
-      Action marcar = delegate { for (int i = 0; i < itens.Count; i++) itens[i].Checked = pares[i * 2] == ler(); };
-      for (int i = 0; i < pares.Length; i += 2) {
-        string valor = pares[i];
-        itens.Add(new ToolStripMenuItem(pares[i + 1], null, delegate { gravar(valor); marcar(); SalvarConfig(); Atualizar(true); }));
-      }
-      sub.DropDownItems.AddRange(itens.ToArray());
-      marcas.Add(marcar);
-      marcar();
-      return sub;
+    Secao Grupo(string titulo, Func<string> ler, Action<string> gravar, params string[] pares) {
+      Secao s = new Secao { Titulo = titulo };
+      for (int i = 0; i < pares.Length; i += 2) s.Chips.Add(Opcao(pares[i + 1], pares[i], ler, gravar));
+      return s;
     }
-
-    void MontarFontes() {
-      List<string> nomes = Desenho.FontesMono();
-      nomes.Add("Segoe UI");
-      string[] pares = new string[nomes.Count * 2];
-      for (int i = 0; i < nomes.Count; i++) { pares[i * 2] = nomes[i]; pares[i * 2 + 1] = nomes[i]; }
-      ToolStripMenuItem pronto = Opcoes("Fonte", pares, () => fonte, v => fonte = v);
-      while (pronto.DropDownItems.Count > 0) subFonte.DropDownItems.Add(pronto.DropDownItems[0]);
+    List<Secao> MontarSecoes() {
+      List<Secao> l = new List<Secao>();
+      l.Add(Grupo("contas", () => vista, v => vista = v, "ambas", "as duas", "Padrão", "padrão", "Trabalho", "trabalho"));
+      l.Add(MontarMonitores());
+      l.Add(Grupo("estilo", () => estilo, v => estilo = v, "barras", "barras", "texto", "só texto"));
+      l.Add(Grupo("paleta", () => paleta, v => paleta = v, "tokyo", "tokyo night", "catppuccin", "catppuccin", "terminal", "terminal"));
+      l.Add(Grupo("tema", () => tema, v => tema = v, "auto", "igual ao windows", "escuro", "escuro", "claro", "claro"));
+      l.Add(Grupo("tamanho", () => tamanho, v => tamanho = v, "pequena", "p", "media", "m", "normal", "g", "grande", "gg"));
+      l.Add(Grupo("fundo", () => fundo, v => fundo = v, "opaco", "sólido", "translucido", "translúcido", "transparente", "transparente"));
+      if (fontes == null) { fontes = Desenho.FontesMono(); fontes.Add("Segoe UI"); }
+      Secao f = new Secao { Titulo = "fonte" };
+      foreach (string n in fontes) f.Chips.Add(Opcao(n, n, () => fonte, v => fonte = v));
+      l.Add(f);
+      Secao acoes = new Secao { Titulo = "ações" };
+      acoes.Chips.Add(new Chip { Texto = "abrir com o windows", Ativo = AbreComWindows, Acao = delegate { MudarInicio(!AbreComWindows()); } });
+      acoes.Chips.Add(new Chip { Texto = "visual padrão", Acao = delegate {
+        tema = "auto"; paleta = PaletaPadrao; estilo = EstiloPadrao; tamanho = TamanhoPadrao; fundo = FundoPadrao; fonte = "JetBrains Mono"; SalvarConfig(); Atualizar(true);
+      } });
+      acoes.Chips.Add(new Chip { Texto = "posição automática", Acao = delegate { manual = null; SalvarConfig(); Atualizar(true); } });
+      acoes.Chips.Add(new Chip { Texto = "esconder 30 min", Acao = delegate { escondidaAte = DateTime.Now.AddMinutes(30); if (painel != null) painel.Encerrar(); AtualizarVisibilidade(); } });
+      acoes.Chips.Add(new Chip { Texto = "fechar", Perigo = true, Acao = delegate { Fechar(); } });
+      l.Add(acoes);
+      return l;
     }
-
-    // Lista os monitores que o Windows enxerga agora. Sem barra de tarefas não há onde pousar: fica desabilitado.
-    void MontarMonitores() {
-      subMonitor.DropDownItems.Clear();
+    // Monitores podem entrar e sair: a lista é refeita sempre. Sem barra de tarefas não há onde pousar, então não entra.
+    Secao MontarMonitores() {
+      Secao s = new Secao { Titulo = "monitor" };
       string atual = Nativo.Dispositivo(BarraAtual());
       Screen[] telas = Screen.AllScreens;
       Array.Sort(telas, (a, b) => string.CompareOrdinal(a.DeviceName, b.DeviceName));
       Screen principal = Screen.PrimaryScreen;
       foreach (Screen t in telas) {
         string dev = t.DeviceName;
+        if (Nativo.BarraDe(dev) == IntPtr.Zero) continue;
         string lado = t.Primary ? "principal" : t.Bounds.Left >= principal.Bounds.Right ? "à direita" : t.Bounds.Right <= principal.Bounds.Left ? "à esquerda" : t.Bounds.Top < principal.Bounds.Top ? "acima" : "abaixo";
-        bool temBarra = Nativo.BarraDe(dev) != IntPtr.Zero;
-        ToolStripMenuItem it = new ToolStripMenuItem("Monitor " + dev.Replace(@"\\.\DISPLAY", "") + " (" + lado + ", " + t.Bounds.Width + "×" + t.Bounds.Height + ")" + (temBarra ? "" : " sem barra de tarefas"), null, delegate { MudarMonitor(dev); });
-        it.Checked = dev == atual;
-        it.Enabled = temBarra;
-        subMonitor.DropDownItems.Add(it);
+        s.Chips.Add(new Chip { Texto = dev.Replace(@"\\.\DISPLAY", "") + " " + lado, Ativo = () => dev == atual, Acao = delegate { MudarMonitor(dev); } });
       }
+      return s;
     }
+    void AbrirPainel() {
+      EsconderCartao();
+      if (painel != null && !painel.IsDisposed) { painel.Encerrar(); return; }
+      painel = new PainelAjustes(MontarSecoes, AparenciaAtual, Posicionar, posEsc);
+      painel.FormClosed += delegate { painel = null; };
+      Posicionar(painel);
+      painel.Show();
+      painel.Activate();
+      Nativo.SetForegroundWindow(painel.Handle);
+      painel.Refazer();
+    }
+    // Acima da pílula, alinhado à direita dela, sem sair do monitor.
+    void Posicionar(PainelAjustes p) {
+      Rectangle m = Nativo.Monitor(BarraAtual());
+      int x = Math.Min(posX + posL, m.Right - 8) - p.Width;
+      p.Location = new Point(Math.Max(m.Left + 8, x), posY - p.Height - (int)(10 * posEsc));
+    }
+
     // A posição arrastada vale para uma barra; na outra, volta para a automática.
     void MudarMonitor(string dev) {
       if (dev == Nativo.Dispositivo(BarraAtual())) return;
@@ -293,7 +374,7 @@ namespace CotaBarra {
       return Nativo.Barra();
     }
     Aparencia AparenciaAtual() {
-      Aparencia a = new Aparencia { Fonte = fonte };
+      Aparencia a = new Aparencia { Fonte = fonte, NomePaleta = paleta, Barras = estilo != "texto" };
       a.Letra = tamanho == "pequena" ? 10 : tamanho == "media" ? 11 : tamanho == "grande" ? 13.5 : 12;
       a.AlfaFundo = fundo == "transparente" ? 1 : fundo == "translucido" ? 150 : 245;
       a.Claro = tema == "claro" || (tema == "auto" && WindowsClaro());
@@ -314,7 +395,23 @@ namespace CotaBarra {
     static bool WindowsClaro() {
       try { object v = Microsoft.Win32.Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "SystemUsesLightTheme", 0); return v is int && (int)v == 1; } catch { return false; }
     }
+    void MudarVista(string v) { vista = v; SalvarConfig(); Atualizar(true); }
     void Fechar() { relogio.Stop(); gatilho.Stop(); vigia.Dispose(); Application.Exit(); }
+
+    // ---------- Cartão de detalhe ----------
+    void MostrarCartao() {
+      if (arrastando || painel != null) return;
+      try {
+        using (Bitmap b = Desenho.Cartao(listaAtual, posEsc, AparenciaAtual())) {
+          Rectangle m = Nativo.Monitor(BarraAtual());
+          int x = Math.Max(m.Left + 8, Math.Min(posX + posL, m.Right - 8) - b.Width);
+          if (!cartao.Visible) cartao.Show();
+          cartao.Pintar(b, x, posY - b.Height - (int)(10 * posEsc));
+          cartao.Reforcar();
+        }
+      } catch (Exception ex) { Registrar("cartão: " + ex.Message); }
+    }
+    void EsconderCartao() { if (cartao.Visible) cartao.Hide(); }
 
     // Onde estão os ícones. Roda pouco: a cada 60 s, ou no máximo a cada 15 s quando a janela da frente muda.
     void Varrer() {
@@ -349,15 +446,12 @@ namespace CotaBarra {
         double esc = dpi / 96.0;
         List<Conta> lista = new List<Conta>();
         foreach (Conta c in Cota.Contas()) if (vista == "ambas" || vista == c.Rotulo) lista.Add(c);
+        listaAtual = lista;
         StringBuilder sb = new StringBuilder();
         foreach (Conta c in lista) sb.Append(c.Assinatura()).Append(';');
         string sig = sb + "#" + r + "#" + dpi + "#" + ap.Claro + "#" + widgetsDir + "#" + iconesEsq + "#" + iconesDir + "#" + bandejaUia + "#" + manual;
         if (!forcar && sig == assinatura) return;
         assinatura = sig;
-
-        sb.Clear();
-        foreach (Conta c in lista) { if (sb.Length > 0) sb.Append("\n\n"); sb.Append(c.Detalhe); }
-        textoDica = sb.ToString();
 
         int margem = (int)(8 * esc), alt = r.Height - 2 * (int)(4 * esc);
         int bandeja = Nativo.BandejaEsquerda(barra);
@@ -374,7 +468,7 @@ namespace CotaBarra {
         using (bmp) {
           posX = x ?? bandeja - margem - bmp.Width;   // sem vão nenhum: fica colada na bandeja
           posY = r.Top + (r.Height - bmp.Height) / 2;
-          posL = bmp.Width; posBarra = r; posMargem = margem; posBandeja = bandeja;
+          posL = bmp.Width; posH = bmp.Height; posBarra = r; posMargem = margem; posBandeja = bandeja; posEsc = esc;
           forma.Pintar(bmp, posX, posY);
         }
       } catch (Exception ex) { Registrar("desenho: " + ex.Message); }
@@ -393,7 +487,7 @@ namespace CotaBarra {
         }
         if (mostrar != visivel) {
           visivel = mostrar;
-          if (mostrar) { forma.Show(); Atualizar(true); } else forma.Hide();
+          if (mostrar) { forma.Show(); Atualizar(true); } else { EsconderCartao(); forma.Hide(); }
         }
         if (mostrar) forma.Reforcar();
       } catch (Exception ex) { Registrar("visibilidade: " + ex.Message); }
@@ -401,7 +495,7 @@ namespace CotaBarra {
 
     // Clique alterna; arrastar move. O movimento é lido por um timer só enquanto o botão está preso.
     void AoPressionar(object s, MouseEventArgs e) {
-      dica.Hide(forma);
+      EsconderCartao();
       if (e.Button != MouseButtons.Left) return;
       arrastando = true; moveu = false; arrInicio = Cursor.Position.X; arrX0 = posX; arrXAtual = posX;
       arrasto.Start();

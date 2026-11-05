@@ -23,6 +23,17 @@ namespace CotaBarra {
       return x == null ? "nada" : o + " " + x;
     }
 
+    // Conta as células pintadas com a cor cheia, desenhando a barra de verdade.
+    static int Contar(Conta c, int n) {
+      using (Bitmap b = new Bitmap(n * 4 + 2, 12)) using (Graphics g = Graphics.FromImage(b)) {
+        g.Clear(Color.Black);
+        Desenho.Barra(g, 0, 2, 3, 1, 8, n, c, Color.FromArgb(0, 255, 0), Color.FromArgb(40, 40, 40), Color.Black);
+        int t = 0;
+        for (int i = 0; i < n; i++) { Color p = b.GetPixel(i * 4 + 1, 2); if (p.G == 255) t++; }
+        return t;
+      }
+    }
+
     static int Main(string[] a) {
       Console.OutputEncoding = System.Text.Encoding.UTF8;
       Console.WriteLine("--- Fórmula, com contas feitas à mão (84 h = meia semana)");
@@ -76,6 +87,13 @@ namespace CotaBarra {
       Confere("lista de fontes não traz variações de peso", fontes.Contains("JetBrains Mono Light"), false);
       using (Bitmap t = Desenho.Pilula(duas, 1.5, 60, false, new Aparencia { AlfaFundo = 1 }))
         Confere("fundo transparente ainda recebe o mouse", t.GetPixel(t.Width - 8, t.Height / 2).A > 0, true);
+      Confere("barra: 50% de 20 células enche 10", Contar(C(50, 84, 1), 20), 10);
+      Confere("barra: 100% enche todas", Contar(C(100, 84, 1), 20), 20);
+      Confere("barra: acima de 100% não estoura", Contar(new Conta { Usado = 130, Projecao = 200, Esperado = 50, Estado = "ok" }, 20), 20);
+      using (Bitmap so = Desenho.Pilula(duas, 1.5, 60, false, new Aparencia { Barras = false }))
+      using (Bitmap ba = Desenho.Pilula(duas, 1.5, 60, false, new Aparencia { Barras = true }))
+        Confere("os dois estilos desenham coisas diferentes", so.Width != ba.Width, true);
+      Confere("paleta desconhecida cai na Tokyo Night", Paleta.De("nada", false).Fundo, Paleta.De("tokyo", false).Fundo);
 
       Console.WriteLine("--- Cota real agora");
       foreach (Conta c in Cota.Contas())
@@ -89,8 +107,12 @@ namespace CotaBarra {
           new[] { Cota.Calcular(null, "Trabalho", Agora) }, new[] { v, t }
         };
         for (int i = 0; i < casos.Length; i++)
-          using (Bitmap b = Desenho.Pilula(casos[i], 1.5, 60, false, new Aparencia())) b.Save(Path.Combine(a[0], "exe-" + i + ".png"));
-        using (Bitmap b = Desenho.Pilula(casos[5], 1.5, 60, true, new Aparencia())) b.Save(Path.Combine(a[0], "exe-compacta.png"));
+          using (Bitmap b = Desenho.Pilula(casos[i], 1.5, 60, false, new Aparencia { AlfaFundo = 245, Letra = 12 })) b.Save(Path.Combine(a[0], "exe-" + i + ".png"));
+        using (Bitmap b = Desenho.Pilula(casos[5], 1.5, 60, true, new Aparencia { AlfaFundo = 245, Letra = 12 })) b.Save(Path.Combine(a[0], "exe-compacta.png"));
+        foreach (string pal in new[] { "tokyo", "catppuccin", "terminal" })
+          foreach (bool claro in new[] { false, true })
+            using (Bitmap b = Desenho.Cartao(casos[5], 1.5, new Aparencia { NomePaleta = pal, Claro = claro })) b.Save(Path.Combine(a[0], "cartao-" + pal + (claro ? "-claro" : "") + ".png"));
+        using (Bitmap b = Desenho.Cartao(new[] { casos[2][0], casos[3][0], casos[4][0] }, 1.5, new Aparencia())) b.Save(Path.Combine(a[0], "cartao-estados.png"));
       }
       Console.WriteLine();
       Console.WriteLine(falhas > 0 ? falhas + " FALHA(S)" : "Tudo confere.");
