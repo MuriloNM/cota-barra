@@ -517,7 +517,8 @@ namespace CotaBarra {
               if (s.TemBarra) {
                 int altoBarra = (int)(px * 0.62);
                 float ondaLinha = a.Onda == SemOnda ? SemOnda : a.Onda - i * 0.08f;   // a segunda linha vem um pouco atrás
-                Barra(g, xB, (int)(y + (altLinha - altoBarra) / 2), cel, vaoCel, altoBarra, Celulas, c, cor, trilha, p.Texto, ondaLinha, p.Destaque);
+                // A onda é a própria cor da barra, realçada: verde, amarela ou vermelha, conforme o ritmo agora.
+                Barra(g, xB, (int)(y + (altLinha - altoBarra) / 2), cel, vaoCel, altoBarra, Celulas, c, cor, trilha, p.Texto, ondaLinha, Misturar(cor, p.Texto, 0.65f));
               }
               if (s.Rotulo.Length > 0) g.DrawString(s.Rotulo, fNormal, bFraco, x1, y, fmt);
               if (s.Resto.Length > 0) g.DrawString(s.Resto, fNormal, ok ? bForte : bFraco, x3, y, fmt);
