@@ -2,7 +2,20 @@
 
 Mostra a cota semanal do Claude fora do Claude, no Windows 11, numa janelinha com cara de terminal sobre a barra de tarefas.
 
-**Escolhida:** a pílula (Murilo, 04/11/2026). A bandeja fica no repositório, fechada.
+## Instalar
+
+Precisa de Windows 11 e do plugin `cota` no Claude: é ele que guarda a leitura que a pílula mostra.
+
+1. **Plugin:** no app, clique em **+** ao lado do campo de texto, depois **Plugins**, **Add marketplace** com `MuriloNM/claude-cota` e **Add plugin** `cota`. Reinicie o Claude e mande uma mensagem, para gerar a primeira leitura.
+2. **Pílula:** extraia esta pasta num lugar fixo, como `C:\cota-barra`, e dê dois cliques em `instalar.cmd`. Ele compila com o que já vem no Windows, não instala nada e abre a pílula.
+3. **Uso:** botão direito na pílula abre os ajustes, inclusive "abrir com o windows".
+
+**Antivírus:** o programa é compilado na sua máquina e não tem assinatura, então alguns antivírus podem barrar. Ele não usa rede nem credenciais, e o código está em `src/`. Só crie uma exceção se confiar em quem te passou. Se ele for barrado, a abertura cai numa versão antiga em PowerShell, que pode não achar a cota.
+
+Só atualiza com o Claude aberto. A cota por modelo e a janela de 5 h ainda dependem de um mod de teste que não vem neste pacote.
+## Os dois formatos
+
+A pílula é o formato principal; a bandeja é uma alternativa antiga.
 
 | | Abrir | Fechar |
 |---|---|---|
@@ -28,7 +41,7 @@ Também dá para fechar pelo botão direito. Para a pílula abrir com o Windows,
 
 ## Regras
 
-- **Dados:** só lê `~/.claude/plugins/store/cota_inline-633892c87774.json`, chaves `ultima:padrao` e `ultima:Trabalho`. Nunca grava nele, não usa rede nem credenciais. Grava só as preferências, em `%LOCALAPPDATA%\cota-barra`.
+- **Dados:** só lê o arquivo `cota_*.json` em `~/.claude/plugins/store`, chaves `ultima:padrao` e `ultima:Trabalho`. Nunca grava nele, não usa rede nem credenciais. Grava só as preferências, em `%LOCALAPPDATA%\cota-barra`.
 - **Fórmula:** igual à do plugin. `decorrido = 1 - resta/semana` (limitado a 0..1); `esperado = decorrido*100`; `projeção = usado/decorrido` se `decorrido > 0.02`, senão `usado`; verde se `usado - esperado < -5`, vermelho se `> 5`, amarelo no resto.
 - **Sinal no começo da linha:** `>` leitura boa, na cor do ritmo; `~` leitura com mais de 2 h, com aviso "velha" em laranja e número cinza; `x` semana vencida ou sem leitura, sem número.
 

@@ -175,7 +175,7 @@ namespace CotaBarra {
     // O nome do arquivo muda de instalação para instalação: vale o mais recente.
     public static string Arquivo() {
       string teste = Environment.GetEnvironmentVariable("COTA_ARQUIVO");   // só para testar com um arquivo de exemplo
-      return !string.IsNullOrEmpty(teste) ? teste : MaisRecente("cota_inline-*.json");
+      return !string.IsNullOrEmpty(teste) ? teste : MaisRecente("cota_*.json");   // o sufixo muda conforme a instalação do plugin
     }
     // A janela de 5 h pode vir de um arquivo à parte, gravado pelo mod de teste. Só lido.
     static string Arquivo5h() {
