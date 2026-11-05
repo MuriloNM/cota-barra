@@ -24,6 +24,13 @@ Skip if it is already installed.
 
 If this fails, read the [plugin README](https://github.com/MuriloNM/claude-cota#readme). Then the person restarts Claude and sends one message, which creates the first reading.
 
+The pill needs plugin **0.6 or newer**. Reinstalling can bring back an old version, because Claude installs from a local copy of the catalog that may be out of date. If the plugin is older than 0.6, refresh the catalog first, then restart Claude:
+
+- **Claude Code:** `claude plugin marketplace update claude-cota`, then `claude plugin update cota`.
+- **Claude desktop app:** the update button may be unavailable. Run `git -C "$HOME\.claude\plugins\marketplaces\claude-cota" pull`, then remove the plugin and add it again.
+
+On an old version, `/cota` may also show `no connected MCP tool "get_usage" on a server named "ccd_session_mgmt"`. The same update fixes it.
+
 If they asked only for the plugin, stop here and tell them the quota shows inside Claude.
 
 ## Step 3. Pill
@@ -41,7 +48,7 @@ Expand-Archive $zip -DestinationPath $destino -Force
 Get-FileHash (Join-Path $destino 'cota-barra\bin\pilula.exe') -Algorithm SHA256
 ```
 
-Compare that hash with the one on the [release page](https://github.com/MuriloNM/cota-barra/releases/latest). If it differs, stop and tell the person.
+Compare that hash with the one in the text of the [release page](https://github.com/MuriloNM/cota-barra/releases/latest), under "SHA-256 of `bin\pilula.exe`". The digest GitHub shows next to the download is the zip's, not the program's. If the program's hash differs, stop and tell the person.
 
 ```powershell
 cmd /c (Join-Path $destino 'cota-barra\instalar.cmd')
@@ -58,6 +65,7 @@ Get-Process pilula
 | Process found | The pill is running | Ask the person to look at the taskbar, next to the clock |
 | Output says `.exe` was blocked, or no process | The antivirus blocked it, or the old PowerShell version opened | See "Antivirus" |
 | Pill shows `sem leitura` | No reading yet | Confirm the plugin is on, and send a message in Claude |
+| Pill shows `atualize o plugin cota` | The plugin is older than 0.6 | Update it as in Step 2 |
 
 ## Step 5. Explain and finish
 

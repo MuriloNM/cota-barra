@@ -40,7 +40,7 @@ Reply in the person's language. Do not propose a plan or recommend an option bef
 
 ## Install by hand
 
-1. Install the plugin: see [its README](https://github.com/MuriloNM/claude-cota#readme).
+1. Install the plugin, version 0.6 or newer: see [its README](https://github.com/MuriloNM/claude-cota#readme). If reinstalling brings back an old version, see [how to refresh the catalog](AGENTS.md#step-2-plugin).
 2. Download [`cota-barra-windows.zip`](https://github.com/MuriloNM/cota-barra/releases/latest/download/cota-barra-windows.zip) and extract it somewhere permanent.
 3. Double-click `instalar.cmd`.
 
@@ -61,7 +61,7 @@ The account is called `Trabalho` by default. To change it, edit the name at the 
 
 New, unsigned programs can get blocked. McAfee flagged this one as a "virus or potentially unwanted program" on the author's PC. The cause is unconfirmed; it is treated as a false positive because the program uses no network and no credentials.
 
-Don't take that on trust: the source is in [`src/`](src/), and the program's `SHA-256` is on the release page. You can also compile it yourself: delete the `bin` folder and run `instalar.cmd`, which uses the compiler that ships with Windows. A locally compiled file can be blocked too.
+Don't take that on trust: the source is in [`src/`](src/), and the program's `SHA-256` is in the text of the [release page](https://github.com/MuriloNM/cota-barra/releases/latest). The digest GitHub shows next to the download is the zip's. You can also compile it yourself: delete the `bin` folder and run `instalar.cmd`, which uses the compiler that ships with Windows. A locally compiled file can be blocked too.
 
 If the program is blocked, opening falls back to an old PowerShell version (`pilula.ps1`), without bars or the settings panel.
 

@@ -90,6 +90,13 @@ namespace CotaBarra {
       List<Conta> l = Cota.Contas(Agora, tmp);
       Confere("ignora a chave antiga \"ultima\"", l[0].Usado, 18);
       Confere("só aparece a conta que existe", l.Count, 1);
+      string tmpVelho = Path.Combine(Path.GetTempPath(), "cota-barra-teste-" + Guid.NewGuid().ToString("N") + ".json");
+      File.WriteAllText(tmpVelho, "{\"ultima\":{\"percentUsed\":42,\"resetsAt\":\"2026-11-09T19:00:00Z\",\"lido\":1793835996553}}");
+      Confere("só a chave antiga: plugin antigo", Cota.Contas(Agora, tmpVelho)[0].Estado, "plugin-antigo");
+      File.WriteAllText(tmpVelho, "{}");
+      File.SetLastWriteTimeUtc(tmpVelho, DateTime.UtcNow.AddMinutes(1));
+      Confere("arquivo sem chave nenhuma: sem leitura", Cota.Contas(Agora, tmpVelho)[0].Estado, "sem");
+      File.Delete(tmpVelho);
       File.WriteAllText(tmp, "{ quebrado");
       File.SetLastWriteTimeUtc(tmp, DateTime.UtcNow.AddMinutes(1));
       Confere("JSON quebrado mantém o último bom", Cota.Contas(Agora, tmp)[0].Usado, 18);

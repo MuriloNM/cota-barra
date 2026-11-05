@@ -15,6 +15,9 @@ function Wait-Pid {
 
 $exe = Join-Path $PSScriptRoot "bin\$Nome.exe"
 if (Test-Path $exe) {
+    # Aberta por um assistente, herdaria o job do Claude e morreria com ele. Criada pelo WMI, nasce fora dele.
+    $criado = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = "`"$exe`"" } -ErrorAction SilentlyContinue
+    if ($criado -and $criado.ReturnValue -eq 0 -and (Wait-Pid)) { Write-Host "$Nome aberta, .exe (PID $(Get-Content $pidArq))."; exit 0 }
     try {
         Start-Process $exe -ErrorAction Stop
         if (Wait-Pid) { Write-Host "$Nome aberta, .exe (PID $(Get-Content $pidArq))."; exit 0 }

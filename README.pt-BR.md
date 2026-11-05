@@ -32,7 +32,7 @@ Diga ao seu assistente: *"Olha https://github.com/MuriloNM/cota-barra e me ajuda
 
 ## Instalar à mão
 
-1. Instale o plugin: veja o [README dele](https://github.com/MuriloNM/claude-cota#readme).
+1. Instale o plugin, na versão 0.6 ou mais nova: veja o [README dele](https://github.com/MuriloNM/claude-cota#readme). Se reinstalar trouxer de volta uma versão antiga, veja [como atualizar o catálogo](AGENTS.md#step-2-plugin).
 2. Baixe [`cota-barra-windows.zip`](https://github.com/MuriloNM/cota-barra/releases/latest/download/cota-barra-windows.zip) e extraia num lugar fixo.
 3. Dê dois cliques em `instalar.cmd`.
 
@@ -53,7 +53,7 @@ A conta se chama `Trabalho` por padrão. Para mudar, edite o nome no começo dos
 
 Programas novos e sem assinatura podem ser barrados. O McAfee barrou este como "vírus ou software possivelmente indesejado" no PC do autor. O motivo não foi confirmado; o alerta é tratado como falso positivo porque o programa não usa rede nem credenciais.
 
-Não precisa confiar nisso: o código está em [`src/`](src/), e o `SHA-256` do programa está na página da versão. Você também pode compilar: apague a pasta `bin` e rode `instalar.cmd`, que usa o compilador que já vem no Windows. Um arquivo compilado por você também pode ser barrado.
+Não precisa confiar nisso: o código está em [`src/`](src/), e o `SHA-256` do programa está no texto da [página da versão](https://github.com/MuriloNM/cota-barra/releases/latest). O código que o GitHub mostra ao lado do download é o do zip. Você também pode compilar: apague a pasta `bin` e rode `instalar.cmd`, que usa o compilador que já vem no Windows. Um arquivo compilado por você também pode ser barrado.
 
 Se o programa for barrado, a abertura cai numa versão antiga em PowerShell (`pilula.ps1`), sem barras nem painel de ajustes.
 

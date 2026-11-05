@@ -45,7 +45,7 @@ namespace CotaBarra {
   }
 
   public class Conta {
-    public string Rotulo, Estado = "sem", Cor = "cinza", Idade = "", Detalhe, RestaTxt = "", LidaTxt = "";   // Estado: ok | velha | vencida | sem
+    public string Rotulo, Estado = "sem", Cor = "cinza", Idade = "", Detalhe, RestaTxt = "", LidaTxt = "";   // Estado: ok | velha | vencida | sem | plugin-antigo
     public int Usado, Esperado, Projecao, Diferenca, ProjecaoMedia;
     public int DiasHistorico;                  // dias completos de histórico, de qualquer semana
     public double VelDia, DiasAte100 = -1;     // dia típico em pontos, dias até 100% antes do reset (-1: não chega)
@@ -331,7 +331,15 @@ namespace CotaBarra {
         }
         lista.Add(c);
       }
-      if (lista.Count == 0) lista.Add(Calcular(null, "Claude", agora));
+      if (lista.Count == 0) {
+        Conta vazia = Calcular(null, "Claude", agora);
+        // Só a chave antiga "ultima": há leitura, mas de um plugin anterior à 0.6, que não diz de qual conta ela é.
+        if (json != null && json.ContainsKey("ultima")) {
+          vazia.Estado = "plugin-antigo";
+          vazia.Detalhe = "Plugin cota antigo: atualize para a 0.6 ou mais nova.";
+        }
+        lista.Add(vazia);
+      }
       return lista;
     }
     public static List<Conta> Contas() { return Contas(DateTimeOffset.Now, Arquivo(), true); }
@@ -369,7 +377,7 @@ namespace CotaBarra {
       Seg s = new Seg { Conta = c, Rotulo = rotulo ? c.Rotulo.ToLowerInvariant() : "" };
       if (!TemNumero(c)) {
         s.Usado = "--";
-        if (!compacto) s.Resto = c.Estado == "sem" ? "sem leitura" : "vencida";
+        if (!compacto) s.Resto = c.Estado == "sem" ? "sem leitura" : c.Estado == "plugin-antigo" ? "atualize o plugin cota" : "vencida";
         return s;
       }
       s.Usado = c.Usado + "%";
@@ -555,6 +563,7 @@ namespace CotaBarra {
         const int Sep = 3;
         Func<Conta, string> linhaRitmo = c => {
           if (c.Estado == "sem") return "sem leitura: abra o Claude nesta conta";
+          if (c.Estado == "plugin-antigo") return "plugin antigo: atualize o cota para a 0.6 ou mais nova";
           if (c.Estado == "vencida") return "semana vencida: abra o Claude nesta conta";
           string r = c.Diferenca < -5 ? (-c.Diferenca) + " pts de folga" : c.Diferenca > 5 ? c.Diferenca + " pts acima do ritmo" : "no ritmo";
           return c.Estado == "velha" ? "leitura velha, " + c.LidaTxt + ": abra o Claude" : r + " · " + c.LidaTxt;
