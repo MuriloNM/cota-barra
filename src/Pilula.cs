@@ -233,7 +233,7 @@ namespace CotaBarra {
     readonly Temporizador arrasto = new Temporizador { Interval = 30 };
     readonly Temporizador timerOnda = new Temporizador { Interval = 40 };   // só roda enquanto a onda passa
     const double OndaMs = 1500;
-    string onda = "300";                       // segundos entre as ondas; "0" desliga
+    string onda = "0";                         // segundos entre as ondas; "0" desliga, e é o padrão
     DateTime proximaOnda = DateTime.MinValue, inicioOnda;
     bool ultimoCompacto; int ultimaAltura;
     readonly EventWaitHandle sinalFechar;
@@ -354,7 +354,7 @@ namespace CotaBarra {
       Secao acoes = new Secao { Titulo = "ações" };
       acoes.Chips.Add(new Chip { Texto = "abrir com o windows", Ativo = AbreComWindows, Acao = delegate { MudarInicio(!AbreComWindows()); } });
       acoes.Chips.Add(new Chip { Texto = "visual padrão", Acao = delegate {
-        tema = "auto"; paleta = PaletaPadrao; estilo = EstiloPadrao; tamanho = TamanhoPadrao; fundo = FundoPadrao; fonte = "JetBrains Mono"; onda = "300"; proximaOnda = DateTime.MinValue; SalvarConfig(); Atualizar(true);
+        tema = "auto"; paleta = PaletaPadrao; estilo = EstiloPadrao; tamanho = TamanhoPadrao; fundo = FundoPadrao; fonte = "JetBrains Mono"; onda = "0"; proximaOnda = DateTime.MinValue; SalvarConfig(); Atualizar(true);
       } });
       acoes.Chips.Add(new Chip { Texto = "posição automática", Acao = delegate { manual = null; SalvarConfig(); Atualizar(true); } });
       acoes.Chips.Add(new Chip { Texto = "esconder 30 min", Acao = delegate { escondidaAte = DateTime.Now.AddMinutes(30); if (painel != null) painel.Encerrar(); AtualizarVisibilidade(); } });

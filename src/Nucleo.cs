@@ -414,7 +414,7 @@ namespace CotaBarra {
 
     // Barra em células: cheia até o usado, apagada até a projeção, trilha no resto e um risco no esperado de hoje.
     public const float SemOnda = -9f;
-    const float MeioOnda = 2f, BordaOnda = 2f, ForcaOnda = 0.90f;   // 5 células fortes de uma vez, mais 2 se apagando de cada lado
+    const float MeioOnda = 1f, BordaOnda = 1f, ForcaOnda = 0.90f;   // 3 células fortes de uma vez, com a borda se apagando
     static Color Misturar(Color a, Color b, float k) {
       return Color.FromArgb(a.A, (int)(a.R + (b.R - a.R) * k), (int)(a.G + (b.G - a.G) * k), (int)(a.B + (b.B - a.B) * k));
     }
