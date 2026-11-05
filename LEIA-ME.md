@@ -19,7 +19,8 @@ Também dá para fechar pelo botão direito. Para a pílula abrir com o Windows,
 ## Como é feita
 
 - **Pílula:** C# em `src/`, compilado para `bin/pilula.exe` por `compilar.cmd`, com o compilador que já vem no Windows. Não instala nada. `bin/` não vai para o git: rode `compilar.cmd` depois de clonar.
-- **McAfee:** ele barra o `.exe` compilado como possível vírus, e a exceção no próprio McAfee parece valer só para aquele arquivo exato. Cada `compilar.cmd` pede refazer a exceção: remover a antiga e adicionar `bin\pilula.exe` antes de abrir.
+- **McAfee:** ele barra o `.exe` compilado como possível vírus, e a exceção no próprio McAfee parece valer só para aquele arquivo exato. O que funcionou depois de cada `compilar.cmd`: deixar o McAfee barrar, restaurar o arquivo da quarentena e manter `bin\pilula.exe` em Arquivos excluídos, nessa ordem, sem recompilar no meio.
+- **Velocidade:** cada leitura nova vai para `%LOCALAPPDATA%\cota-barra\historico.tsv` (21 dias). A velocidade olha as últimas 48 h da semana atual; a projeção mistura velocidade e média, com peso de 0 a 100% conforme o histórico chega a 48 h. A cor e o esperado seguem a fórmula do plugin.
 - **Reserva:** se o `.exe` não existir ou for barrado, `abrir-pilula.cmd` usa `pilula.ps1`, que tem o visual antigo.
 - **Fonte:** JetBrains Mono, se instalada; senão Cascadia Mono, depois Consolas.
 - **Bandeja:** PowerShell com WinForms (`bandeja.ps1`, `nucleo.ps1`).
