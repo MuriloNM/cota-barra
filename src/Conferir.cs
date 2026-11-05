@@ -23,6 +23,15 @@ namespace CotaBarra {
       return x == null ? "nada" : o + " " + x;
     }
 
+    static Conta Vel(double usado, List<Ponto> h) { return Cota.Calcular(L(usado, 84, 1), "x", Agora, h); }
+    // Dois pontos: um há "horas" com "antes" e um agora com "usado".
+    static List<Ponto> H(double usado, double horas, double antes) {
+      DateTimeOffset r = Agora.AddHours(84);
+      return new List<Ponto> {
+        new Ponto { Lido = Agora.AddHours(-horas).ToUnixTimeMilliseconds(), Usado = antes, Reset = r },
+        new Ponto { Lido = Agora.ToUnixTimeMilliseconds(), Usado = usado, Reset = r }
+      };
+    }
     // Conta as células pintadas com a cor cheia, desenhando a barra de verdade.
     static int Contar(Conta c, int n) {
       using (Bitmap b = new Bitmap(n * 4 + 2, 12)) using (Graphics g = Graphics.FromImage(b)) {
@@ -58,7 +67,7 @@ namespace CotaBarra {
       File.WriteAllText(tmp, "{\"ultima\":{\"percentUsed\":99,\"resetsAt\":\"2030-01-01T00:00:00Z\",\"lido\":1},\"ultima:padrao\":{\"percentUsed\":18,\"resetsAt\":\"2026-11-09T19:00:00Z\",\"lido\":1793835996553}}");
       List<Conta> l = Cota.Contas(Agora, tmp);
       Confere("ignora a chave antiga \"ultima\"", l[0].Usado, 18);
-      Confere("Trabalho ausente vira \"sem\"", l[1].Estado, "sem");
+      Confere("só aparece a conta que existe", l.Count, 1);
       File.WriteAllText(tmp, "{ quebrado");
       File.SetLastWriteTimeUtc(tmp, DateTime.UtcNow.AddMinutes(1));
       Confere("JSON quebrado mantém o último bom", Cota.Contas(Agora, tmp)[0].Usado, 18);
@@ -95,6 +104,26 @@ namespace CotaBarra {
         Confere("os dois estilos desenham coisas diferentes", so.Width != ba.Width, true);
       Confere("paleta desconhecida cai na Tokyo Night", Paleta.De("nada", false).Fundo, Paleta.De("tokyo", false).Fundo);
 
+      Console.WriteLine("--- Velocidade (reset em 84 h; usado 50; pela média daria 100)");
+      Confere("sem histórico: fica na média", Vel(50, null).Projecao, 100);
+      Confere("com 1 h de histórico: ainda na média", Vel(50, H(50, 1, 49.5)).Projecao, 100);
+      // 48 h de histórico, subindo 10 pontos: 5 pts/dia. Em 84 h (3,5 dias) soma 17,5: 67,5.
+      Conta v48 = Vel(50, H(50, 48, 40));
+      Confere("48 h: velocidade em pts/dia", Cota.Inteiro(v48.VelDia), 5);
+      Confere("48 h: projeção só pela velocidade", v48.Projecao, 68);
+      Confere("48 h: a média continua guardada", v48.ProjecaoMedia, 100);
+      // 24 h subindo 5: peso 50%. Velocidade dá 67,5; média dá 100; meio a meio: 83,75.
+      Confere("24 h: meio a meio com a média", Vel(50, H(50, 24, 45)).Projecao, 84);
+      Confere("cor não muda com a velocidade", v48.Cor, "amarelo");
+      Confere("sem subir: projeção = usado", Vel(50, H(50, 48, 50)).Projecao, 50);
+      Confere("uso que cai não dá projeção menor que o usado", Vel(50, H(50, 48, 60)).Projecao, 50);
+      // 20 pts/dia a partir de 90: 100% em 0,5 dia, antes do reset.
+      Confere("avisa quando chega a 100% antes do reset", Vel(90, H(90, 48, 50)).DiasAte100, 0.5);
+      Confere("não avisa se não chega", Vel(50, H(50, 48, 40)).DiasAte100, -1);
+      List<Ponto> outraSemana = H(50, 48, 40);
+      foreach (Ponto p in outraSemana) p.Reset = p.Reset.AddDays(-7);
+      Confere("semana passada não conta", Vel(50, outraSemana).Projecao, 100);
+
       Console.WriteLine("--- Cota real agora");
       foreach (Conta c in Cota.Contas())
         Console.WriteLine(c.Rotulo + ": " + c.Estado + " " + c.Cor + " " + c.Usado + "% / " + c.Esperado + "% -> " + c.Projecao + "% (" + c.Idade + ")");
@@ -113,6 +142,7 @@ namespace CotaBarra {
           foreach (bool claro in new[] { false, true })
             using (Bitmap b = Desenho.Cartao(casos[5], 1.5, new Aparencia { NomePaleta = pal, Claro = claro })) b.Save(Path.Combine(a[0], "cartao-" + pal + (claro ? "-claro" : "") + ".png"));
         using (Bitmap b = Desenho.Cartao(new[] { casos[2][0], casos[3][0], casos[4][0] }, 1.5, new Aparencia())) b.Save(Path.Combine(a[0], "cartao-estados.png"));
+        using (Bitmap b = Desenho.Cartao(new[] { Vel(50, H(50, 48, 40)), Vel(90, H(90, 48, 50)), Vel(50, H(50, 24, 45)), Vel(50, null) }, 1.5, new Aparencia())) b.Save(Path.Combine(a[0], "cartao-velocidade.png"));
       }
       Console.WriteLine();
       Console.WriteLine(falhas > 0 ? falhas + " FALHA(S)" : "Tudo confere.");

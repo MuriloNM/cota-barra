@@ -223,8 +223,6 @@ namespace CotaBarra {
 
   class Aplicacao {
     static readonly string Pasta = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "cota-barra");
-    static readonly string[] Ordem = { "ambas", "Padrão", "Trabalho" };
-    // O padrão é o visual que o Murilo escolheu em 04/11/2026: pequeno e transparente.
     const string TamanhoPadrao = "pequena", FundoPadrao = "transparente", EstiloPadrao = "barras", PaletaPadrao = "tokyo";
 
     readonly FormaPilula forma = new FormaPilula(false);
@@ -252,6 +250,7 @@ namespace CotaBarra {
     Aplicacao(EventWaitHandle sinal) {
       sinalFechar = sinal;
       LerConfig();
+      Historico.Carregar(Path.Combine(Pasta, "historico.tsv"), DateTimeOffset.Now);
       forma.MouseEnter += delegate { MostrarCartao(); };
       forma.MouseLeave += delegate { EsconderCartao(); };
       forma.MouseDown += AoPressionar;
@@ -307,7 +306,11 @@ namespace CotaBarra {
     }
     List<Secao> MontarSecoes() {
       List<Secao> l = new List<Secao>();
-      l.Add(Grupo("contas", () => vista, v => vista = v, "ambas", "as duas", "Padrão", "padrão", "Trabalho", "trabalho"));
+      List<Conta> contas = Cota.Contas();
+      Secao sc = new Secao { Titulo = "contas" };
+      sc.Chips.Add(Opcao(contas.Count == 2 ? "as duas" : "todas", "ambas", () => vista, v => vista = v));
+      foreach (Conta c in contas) sc.Chips.Add(Opcao(c.Rotulo.ToLowerInvariant(), c.Rotulo, () => vista, v => vista = v));
+      l.Add(sc);
       l.Add(MontarMonitores());
       l.Add(Grupo("estilo", () => estilo, v => estilo = v, "barras", "barras", "texto", "só texto"));
       l.Add(Grupo("paleta", () => paleta, v => paleta = v, "tokyo", "tokyo night", "catppuccin", "catppuccin", "terminal", "terminal"));
@@ -445,7 +448,9 @@ namespace CotaBarra {
         uint dpi = Nativo.GetDpiForWindow(barra);
         double esc = dpi / 96.0;
         List<Conta> lista = new List<Conta>();
-        foreach (Conta c in Cota.Contas()) if (vista == "ambas" || vista == c.Rotulo) lista.Add(c);
+        List<Conta> todas = Cota.Contas();
+        foreach (Conta c in todas) if (vista == "ambas" || vista == c.Rotulo) lista.Add(c);
+        if (lista.Count == 0) lista = todas;   // a conta escolhida deixou de existir
         listaAtual = lista;
         StringBuilder sb = new StringBuilder();
         foreach (Conta c in lista) sb.Append(c.Assinatura()).Append(';');
@@ -513,7 +518,11 @@ namespace CotaBarra {
       }
       arrasto.Stop(); arrastando = false;
       if (moveu) { manual = posBarra.Right - arrXAtual - posL; SalvarConfig(); Atualizar(true); }
-      else MudarVista(Ordem[(Array.IndexOf(Ordem, vista) + 1) % Ordem.Length]);
+      else {
+        List<string> ordem = new List<string> { "ambas" };
+        foreach (Conta c in Cota.Contas()) ordem.Add(c.Rotulo);
+        MudarVista(ordem[(ordem.IndexOf(vista) + 1) % ordem.Count]);
+      }
     }
 
     [STAThread]

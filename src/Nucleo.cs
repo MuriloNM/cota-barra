@@ -45,15 +45,71 @@ namespace CotaBarra {
 
   public class Conta {
     public string Rotulo, Estado = "sem", Cor = "cinza", Idade = "", Detalhe, RestaTxt = "", LidaTxt = "";   // Estado: ok | velha | vencida | sem
-    public int Usado, Esperado, Projecao, Diferenca;
+    public int Usado, Esperado, Projecao, Diferenca, ProjecaoMedia;
+    public double VelDia, HorasHistorico, DiasAte100 = -1;   // pontos por dia, horas de histórico nesta semana, dias até 100% antes do reset (-1: não chega)
     public string Assinatura() { return Rotulo + "|" + Estado + "|" + Cor + "|" + Usado + "|" + Esperado + "|" + Projecao + "|" + Idade; }
   }
 
+  public class Ponto { public long Lido; public double Usado; public DateTimeOffset Reset; }
+
+  // Histórico das leituras, em arquivo próprio: o arquivo de cota guarda só a última e nunca é alterado.
+  public static class Historico {
+    const int GuardarDias = 21;
+    static readonly Dictionary<string, List<Ponto>> pontos = new Dictionary<string, List<Ponto>>();
+    static string arquivo;
+
+    public static void Carregar(string caminho, DateTimeOffset agora) {
+      arquivo = caminho; pontos.Clear();
+      long corte = agora.AddDays(-GuardarDias).ToUnixTimeMilliseconds();
+      List<string> mantidas = new List<string>(); bool podou = false;
+      try {
+        if (!File.Exists(caminho)) return;
+        foreach (string linha in File.ReadAllLines(caminho)) {
+          string[] p = linha.Split('\t');
+          long lido; double usado; DateTimeOffset reset;
+          if (p.Length != 4 || !long.TryParse(p[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out lido) || !double.TryParse(p[2], NumberStyles.Float, CultureInfo.InvariantCulture, out usado) || !DateTimeOffset.TryParse(p[3], CultureInfo.InvariantCulture, DateTimeStyles.None, out reset)) { podou = true; continue; }
+          if (lido < corte) { podou = true; continue; }
+          Lista(p[0]).Add(new Ponto { Lido = lido, Usado = usado, Reset = reset });
+          mantidas.Add(linha);
+        }
+        if (podou) { string tmp = caminho + ".novo"; File.WriteAllLines(tmp, mantidas); File.Copy(tmp, caminho, true); File.Delete(tmp); }
+      } catch { }
+    }
+    static List<Ponto> Lista(string conta) {
+      List<Ponto> l;
+      if (!pontos.TryGetValue(conta, out l)) { l = new List<Ponto>(); pontos[conta] = l; }
+      return l;
+    }
+    public static List<Ponto> De(string conta) { return Lista(conta); }
+    // Só grava quando a leitura é nova.
+    public static void Registrar(string conta, Leitura l) {
+      if (arquivo == null || l == null || l.Usado == null || l.Lido == null) return;
+      DateTimeOffset reset;
+      if (!DateTimeOffset.TryParse(l.ResetsAt, CultureInfo.InvariantCulture, DateTimeStyles.None, out reset)) return;
+      List<Ponto> lista = Lista(conta);
+      if (lista.Count > 0 && lista[lista.Count - 1].Lido >= l.Lido.Value) return;
+      lista.Add(new Ponto { Lido = l.Lido.Value, Usado = l.Usado.Value, Reset = reset });
+      try { File.AppendAllText(arquivo, conta + "\t" + l.Lido.Value + "\t" + l.Usado.Value.ToString(CultureInfo.InvariantCulture) + "\t" + l.ResetsAt + Environment.NewLine); } catch { }
+    }
+  }
+
   public static class Cota {
-    public static readonly string Arquivo = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), @".claude\plugins\store\cota_inline-633892c87774.json");
     public const double SemanaMs = 604800000.0;
     public const int VelhaDepoisMin = 120;   // leitura com mais de 2 h aparece como velha
-    static readonly string[,] Chaves = { { "ultima:padrao", "Padrão" }, { "ultima:Trabalho", "Trabalho" } };
+    public const double JanelaHoras = 48;    // a velocidade olha as últimas 48 h: pega dia e noite, e não só as horas de trabalho
+
+    // O nome do arquivo muda de instalação para instalação: vale o mais recente.
+    public static string Arquivo() {
+      try {
+        string pasta = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), @".claude\plugins\store");
+        string melhor = null; DateTime data = DateTime.MinValue;
+        foreach (string f in Directory.GetFiles(pasta, "cota_inline-*.json")) {
+          DateTime d = File.GetLastWriteTimeUtc(f);
+          if (d > data) { data = d; melhor = f; }
+        }
+        return melhor;
+      } catch { return null; }
+    }
 
     public static int Inteiro(double v) { return (int)Math.Round(v, 0, MidpointRounding.AwayFromZero); }
 
@@ -65,7 +121,8 @@ namespace CotaBarra {
     }
 
     // Fórmula igual à do plugin.
-    public static Conta Calcular(Leitura l, string rotulo, DateTimeOffset agora) {
+    public static Conta Calcular(Leitura l, string rotulo, DateTimeOffset agora) { return Calcular(l, rotulo, agora, null); }
+    public static Conta Calcular(Leitura l, string rotulo, DateTimeOffset agora, IList<Ponto> historico) {
       Conta c = new Conta { Rotulo = rotulo, Detalhe = rotulo + ": sem leitura ainda. Abra o Claude nesta conta." };
       if (l == null || l.Usado == null || string.IsNullOrEmpty(l.ResetsAt) || l.Lido == null) return c;
       DateTimeOffset reset;
@@ -87,8 +144,34 @@ namespace CotaBarra {
       double projecao = decorrido > 0.02 ? usado / decorrido : usado;
       double dif = usado - esperado;
       c.Cor = dif < -5 ? "verde" : dif > 5 ? "vermelho" : "amarelo";
-      c.Usado = Inteiro(usado); c.Esperado = Inteiro(esperado); c.Projecao = Inteiro(projecao); c.Diferenca = Inteiro(dif);
+      c.Usado = Inteiro(usado); c.Esperado = Inteiro(esperado); c.Diferenca = Inteiro(dif); c.ProjecaoMedia = Inteiro(projecao);
       c.Estado = min > VelhaDepoisMin ? "velha" : "ok";
+
+      // Velocidade real: quanto subiu nas últimas 48 h desta semana. O peso cresce com o histórico,
+      // de 0 a 100% em 48 h, para a projeção sair da média da semana sem dar saltos.
+      if (historico != null) {
+        long inicioJanela = agoraMs - (long)(JanelaHoras * 3600000);
+        Ponto primeiro = null, ultimo = null;
+        foreach (Ponto p in historico) {
+          if (Math.Abs((p.Reset - reset).TotalMinutes) > 5 || p.Lido < inicioJanela) continue;
+          if (primeiro == null || p.Lido < primeiro.Lido) primeiro = p;
+          if (ultimo == null || p.Lido > ultimo.Lido) ultimo = p;
+        }
+        if (primeiro != null && ultimo != null) {
+          double horas = (ultimo.Lido - primeiro.Lido) / 3600000.0;
+          c.HorasHistorico = horas;
+          if (horas >= 2) {
+            double porHora = Math.Max(ultimo.Usado - primeiro.Usado, 0) / horas;
+            c.VelDia = porHora * 24;
+            double restaHoras = resta / 3600000.0;
+            double projVel = usado + porHora * restaHoras;
+            double peso = Math.Min(horas / JanelaHoras, 1);
+            projecao = Math.Max(usado, peso * projVel + (1 - peso) * projecao);
+            if (porHora > 0 && usado < 100 && (100 - usado) / porHora < restaHoras) c.DiasAte100 = (100 - usado) / porHora / 24;
+          }
+        }
+      }
+      c.Projecao = Inteiro(projecao);
 
       double dias = resta / 86400000;
       c.RestaTxt = dias < 1 ? Inteiro(dias * 24) + " h" : dias.ToString("0.0", CultureInfo.GetCultureInfo("pt-BR")) + " dias";
@@ -126,13 +209,24 @@ namespace CotaBarra {
       return l;
     }
 
-    public static List<Conta> Contas(DateTimeOffset agora, string caminho) {
-      Dictionary<string, object> json = LerArquivo(caminho);
+    // Cada conta é uma chave "ultima:<nome>"; "padrao" vem primeiro. A chave antiga "ultima" não vale.
+    static string RotuloDe(string nome) { return nome == "padrao" ? "Padrão" : nome; }
+    public static List<Conta> Contas(DateTimeOffset agora, string caminho) { return Contas(agora, caminho, false); }
+    static List<Conta> Contas(DateTimeOffset agora, string caminho, bool usarHistorico) {
+      Dictionary<string, object> json = string.IsNullOrEmpty(caminho) ? null : LerArquivo(caminho);
+      List<string> nomes = new List<string>();
+      if (json != null) foreach (string k in json.Keys) if (k.StartsWith("ultima:", StringComparison.Ordinal)) nomes.Add(k.Substring(7));
+      nomes.Sort((a, b) => a == "padrao" ? (b == "padrao" ? 0 : -1) : b == "padrao" ? 1 : string.CompareOrdinal(a, b));
       List<Conta> lista = new List<Conta>();
-      for (int i = 0; i < Chaves.GetLength(0); i++) lista.Add(Calcular(Extrair(json, Chaves[i, 0]), Chaves[i, 1], agora));
+      foreach (string n in nomes) {
+        Leitura l = Extrair(json, "ultima:" + n);
+        if (usarHistorico) Historico.Registrar(n, l);
+        lista.Add(Calcular(l, RotuloDe(n), agora, usarHistorico ? Historico.De(n) : null));
+      }
+      if (lista.Count == 0) lista.Add(Calcular(null, "Claude", agora));
       return lista;
     }
-    public static List<Conta> Contas() { return Contas(DateTimeOffset.Now, Arquivo); }
+    public static List<Conta> Contas() { return Contas(DateTimeOffset.Now, Arquivo(), true); }
 
     // Ordem: posição escolhida pelo usuário, à esquerda da bandeja, à direita dos widgets. null = não cabe.
     public static int? Posicao(int barraEsq, int barraDir, int bandejaEsq, int widgetsDir, int? iconesEsq, int? iconesDir, int largura, int margem, int? manual, out string origem) {
@@ -310,6 +404,7 @@ namespace CotaBarra {
         int pad = (int)(14 * esc), entre = (int)(14 * esc), n = 36, cel = (int)(6 * esc), vao = Math.Max(1, (int)(1.5 * esc)), altoBarra = (int)(9 * esc);
         int wBarra = LarguraBarra(cel, vao, n);
         const string Legenda = "cheio: usado · claro: projeção · risco: esperado";
+        const double JanelaTexto = Cota.JanelaHoras;
         const int Sep = 3;
         Func<Conta, string> linhaRitmo = c => {
           if (c.Estado == "sem") return "sem leitura: abra o Claude nesta conta";
@@ -317,16 +412,27 @@ namespace CotaBarra {
           string r = c.Diferenca < -5 ? (-c.Diferenca) + " pts de folga" : c.Diferenca > 5 ? c.Diferenca + " pts acima do ritmo" : "no ritmo";
           return c.Estado == "velha" ? "leitura velha, " + c.LidaTxt + ": abra o Claude" : r + " · " + c.LidaTxt;
         };
+        CultureInfo br = CultureInfo.GetCultureInfo("pt-BR");
+        Func<Conta, string> linhaVel = c => {
+          if (c.HorasHistorico < 2) return "velocidade: aprendendo, projeção pela média";
+          string v = "vel " + c.VelDia.ToString("0.0", br) + " pts/dia";
+          if (c.DiasAte100 >= 0) return v + " · 100% em " + c.DiasAte100.ToString("0.0", br) + " dias";
+          if (c.HorasHistorico < JanelaTexto) return v + " · aprendendo, " + Cota.Inteiro(c.HorasHistorico) + " h de 48";
+          return v + " · pela média: " + c.ProjecaoMedia + "%";
+        };
         int larg = wBarra, alt;
         float hN, hP;
         using (Bitmap med = new Bitmap(1, 1)) using (Graphics gm = Graphics.FromImage(med)) {
           hN = fN.GetHeight(gm); hP = fP.GetHeight(gm);
-          foreach (Conta c in lista) larg = Math.Max(larg, Medir(gm, linhaRitmo(c), fN, fmt));
+          foreach (Conta c in lista) {
+            larg = Math.Max(larg, Medir(gm, linhaRitmo(c), fN, fmt));
+            if (TemNumero(c)) larg = Math.Max(larg, Medir(gm, linhaVel(c), fN, fmt));
+          }
           larg = Math.Max(larg, Medir(gm, Legenda, fP, fmt));
         }
         alt = pad * 2 + (int)(hP + 10 * esc);
         foreach (Conta c in lista)
-          alt += (int)(hN * 2) + (int)(4 * esc) + entre + (TemNumero(c) ? (int)hN + altoBarra + (int)(8 * esc) : 0);
+          alt += (int)(hN * 2) + (int)(4 * esc) + entre + (TemNumero(c) ? (int)(hN * 2) + altoBarra + (int)(8 * esc) : 0);
         alt -= entre;
         int w = larg + pad * 2;
         Bitmap bmp = new Bitmap(w, alt, PixelFormat.Format32bppPArgb);
@@ -356,6 +462,8 @@ namespace CotaBarra {
                   g.DrawString(q, fN, bT, w - pad - Medir(g, q, fN, fmt), y, fmt);
                 }
                 y += hN + (int)(2 * esc);
+                g.DrawString(linhaVel(c), fN, c.DiasAte100 >= 0 ? bA : bW, pad, y, fmt);
+                y += hN;
               }
               g.DrawString(linhaRitmo(c), fN, c.Estado == "velha" ? bA : bW, pad, y, fmt);
               y += hN + entre;
