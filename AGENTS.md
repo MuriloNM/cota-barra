@@ -9,7 +9,7 @@ A person asked you to help with this repository. This guide applies to any assis
 
 ## Step 1. Ask first
 
-Ask exactly one question before doing anything:
+Ask exactly one question before doing anything, and wait for the answer. Do not write a plan or recommend an option first:
 
 > Do you want only the plugin, with the quota inside Claude, or the plugin and also the pill on the Windows taskbar?
 
@@ -67,7 +67,7 @@ Tell the person: right-click opens the settings; hovering shows the details; the
 
 The program is new and unsigned, so an antivirus may block it. McAfee did on the author's PC; the cause is unconfirmed and it is treated as a false positive. Explain this honestly, and that the source is in `src/`.
 
-Then the person chooses: create the exception themselves, or give up on the pill and keep the plugin. Compiling locally (delete `bin`, run `instalar.cmd`) is another option for those who prefer to read the code, but it can be blocked too.
+Then the person chooses: create the exception themselves, or give up on the pill and keep the plugin. Compiling locally (delete `bin`, run `instalar.cmd`) is another option for those who prefer to read the code, but it can be blocked too. Do not offer `pilula.ps1` as a solution: it is an old, unmaintained fallback.
 
 ## Do not do these unless the person asks
 

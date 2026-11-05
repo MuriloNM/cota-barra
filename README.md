@@ -12,7 +12,15 @@ It is an unsigned prototype. It only updates while Claude is open. The interface
 
 Tell your assistant: *"Look at https://github.com/MuriloNM/cota-barra and help me install it."*
 
-**AI assistants: follow [AGENTS.md](AGENTS.md) step by step. Start by asking whether the person wants only the plugin, or the plugin and also the taskbar pill.**
+### AI assistants: do this, in this order
+
+Reply in the person's language. Do not propose a plan or recommend an option before step 1.
+
+1. **Ask this one question first, and wait:** "Do you want only the plugin, with the quota inside Claude, or the plugin and also the pill on the Windows taskbar?" Without Windows, offer only the plugin.
+2. **Plugin:** `claude plugin install cota --marketplace MuriloNM/claude-cota`. In the desktop app, by hand: **+** next to the text box, **Plugins**, **Add marketplace** `MuriloNM/claude-cota`, **Add plugin** `cota`. Then restart Claude and send one message. If they chose only the plugin, stop here.
+3. **Pill:** read the [full guide](https://raw.githubusercontent.com/MuriloNM/cota-barra/main/AGENTS.md) and run its exact commands. They download the release zip, extract it to `%LOCALAPPDATA%\Programs`, compare the `SHA-256` with the release page, and run `instalar.cmd`.
+4. **Check:** `Get-Process pilula`.
+5. **Never without being asked:** touch the antivirus or its exceptions, turn on "abrir com o windows", read credential files, or write to the plugin's files. If the antivirus blocks the program, explain and let the person choose: create the exception themselves, or keep only the plugin.
 
 ## Install by hand
 

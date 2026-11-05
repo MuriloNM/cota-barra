@@ -12,7 +12,7 @@ Precisa do [plugin `cota`](https://github.com/MuriloNM/claude-cota), que roda de
 
 Diga ao seu assistente: *"Olha https://github.com/MuriloNM/cota-barra e me ajuda a instalar."*
 
-**Assistentes de IA: sigam o [AGENTS.md](AGENTS.md) passo a passo. Comecem perguntando se a pessoa quer só o plugin, ou o plugin e também a pílula na barra de tarefas.**
+**Assistentes de IA: sigam o roteiro do [README em inglês](README.md#ai-assistants-do-this-in-this-order) e o [AGENTS.md](AGENTS.md), respondendo no idioma da pessoa. Antes de propor qualquer plano, perguntem: "Você quer só o plugin, com a cota dentro do Claude, ou o plugin e também a pílula na barra de tarefas do Windows?"**
 
 ## Instalar à mão
 
