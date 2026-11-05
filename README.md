@@ -70,7 +70,7 @@ If the program is blocked, opening falls back to an old PowerShell version (`pil
 - **Hover:** details card.
 - **Click:** switches between accounts.
 - **Drag:** moves it.
-- **Right-click:** accounts, monitor, style (bars or text only), palette, wave on the bars, theme, size, background, font, start with Windows, default look, automatic position, hide for 30 min, close.
+- **Right-click:** accounts, monitor, style (bars or text only), palette, wave on the bars, theme, size, card size, background, font, start with Windows, default look, automatic position, hide for 30 min, close.
 
 The pill hides in full screen, avoids the taskbar icons, and comes back on top if the taskbar covers it.
 

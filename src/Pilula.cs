@@ -224,7 +224,7 @@ namespace CotaBarra {
 
   class Aplicacao {
     static readonly string Pasta = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "cota-barra");
-    const string TamanhoPadrao = "pequena", FundoPadrao = "transparente", EstiloPadrao = "barras", PaletaPadrao = "tokyo";
+    const string TamanhoPadrao = "pequena", CartaoPadrao = "medio", FundoPadrao = "transparente", EstiloPadrao = "barras", PaletaPadrao = "tokyo";
 
     readonly FormaPilula forma = new FormaPilula(false);
     readonly FormaPilula cartao = new FormaPilula(true);
@@ -242,7 +242,7 @@ namespace CotaBarra {
     List<string> fontes;
 
     string vista = "ambas"; int? manual;
-    string tema = "auto", paleta = PaletaPadrao, estilo = EstiloPadrao, tamanho = TamanhoPadrao, fundo = FundoPadrao, fonte = "JetBrains Mono", monitor;   // monitor null = o principal
+    string tema = "auto", paleta = PaletaPadrao, estilo = EstiloPadrao, tamanho = TamanhoPadrao, tamanhoCartao = CartaoPadrao, fundo = FundoPadrao, fonte = "JetBrains Mono", monitor;   // monitor null = o principal
     DateTime escondidaAte = DateTime.MinValue, ultimaVarredura = DateTime.MinValue, ultimoDado = DateTime.MinValue;
     int widgetsDir, bandejaUia; int? iconesEsq, iconesDir;
     string assinatura = "";
@@ -307,7 +307,7 @@ namespace CotaBarra {
         object o;
         if (d.TryGetValue("deslocManual", out o) && o != null) manual = Convert.ToInt32(o);
         vista = Texto(d, "vista", vista); tema = Texto(d, "tema", tema); paleta = Texto(d, "paleta", paleta); estilo = Texto(d, "estilo", estilo);
-        tamanho = Texto(d, "tamanho", tamanho); fundo = Texto(d, "fundo", fundo); fonte = Texto(d, "fonte", fonte); monitor = Texto(d, "monitor", monitor); onda = Texto(d, "onda", onda);
+        tamanho = Texto(d, "tamanho", tamanho); tamanhoCartao = Texto(d, "tamanhoCartao", tamanhoCartao); fundo = Texto(d, "fundo", fundo); fonte = Texto(d, "fonte", fonte); monitor = Texto(d, "monitor", monitor); onda = Texto(d, "onda", onda);
       } catch { }
     }
     static string Texto(Dictionary<string, object> d, string chave, string padrao) { object o; return d.TryGetValue(chave, out o) && o is string ? (string)o : padrao; }
@@ -315,7 +315,7 @@ namespace CotaBarra {
       try {
         Directory.CreateDirectory(Pasta);
         Dictionary<string, object> d = new Dictionary<string, object>();
-        d["vista"] = vista; d["deslocManual"] = manual; d["tema"] = tema; d["paleta"] = paleta; d["estilo"] = estilo; d["tamanho"] = tamanho; d["fundo"] = fundo; d["fonte"] = fonte; d["monitor"] = monitor; d["onda"] = onda;
+        d["vista"] = vista; d["deslocManual"] = manual; d["tema"] = tema; d["paleta"] = paleta; d["estilo"] = estilo; d["tamanho"] = tamanho; d["tamanhoCartao"] = tamanhoCartao; d["fundo"] = fundo; d["fonte"] = fonte; d["monitor"] = monitor; d["onda"] = onda;
         File.WriteAllText(Path.Combine(Pasta, "pilula.json"), new JavaScriptSerializer().Serialize(d), new UTF8Encoding(true));   // com BOM, para a versão em PowerShell ler os acentos
       } catch { }
     }
@@ -345,7 +345,8 @@ namespace CotaBarra {
       // Ao escolher, a onda passa na hora, para mostrar como fica.
       l.Add(Grupo("onda", () => onda, v => { onda = v; proximaOnda = DateTime.MinValue; IniciarOnda(); }, "0", "desligada", "5", "5 s", "10", "10 s", "15", "15 s", "30", "30 s", "60", "1 min", "300", "5 min", "900", "15 min"));
       l.Add(Grupo("tema", () => tema, v => tema = v, "auto", "igual ao windows", "escuro", "escuro", "claro", "claro"));
-      l.Add(Grupo("tamanho", () => tamanho, v => tamanho = v, "pequena", "p", "media", "m", "normal", "g", "grande", "gg"));
+      l.Add(Grupo("tamanho", () => tamanho, v => tamanho = v, "minima", "pp", "pequena", "p", "media", "m", "normal", "g", "grande", "gg"));
+      l.Add(Grupo("cartão", () => tamanhoCartao, v => tamanhoCartao = v, "pequeno", "p", "medio", "m", "normal", "g"));
       l.Add(Grupo("fundo", () => fundo, v => fundo = v, "opaco", "sólido", "translucido", "translúcido", "transparente", "transparente"));
       if (fontes == null) { fontes = Desenho.FontesMono(); fontes.Add("Segoe UI"); }
       Secao f = new Secao { Titulo = "fonte" };
@@ -354,7 +355,7 @@ namespace CotaBarra {
       Secao acoes = new Secao { Titulo = "ações" };
       acoes.Chips.Add(new Chip { Texto = "abrir com o windows", Ativo = AbreComWindows, Acao = delegate { MudarInicio(!AbreComWindows()); } });
       acoes.Chips.Add(new Chip { Texto = "visual padrão", Acao = delegate {
-        tema = "auto"; paleta = PaletaPadrao; estilo = EstiloPadrao; tamanho = TamanhoPadrao; fundo = FundoPadrao; fonte = "JetBrains Mono"; onda = "0"; proximaOnda = DateTime.MinValue; SalvarConfig(); Atualizar(true);
+        tema = "auto"; paleta = PaletaPadrao; estilo = EstiloPadrao; tamanho = TamanhoPadrao; tamanhoCartao = CartaoPadrao; fundo = FundoPadrao; fonte = "JetBrains Mono"; onda = "0"; proximaOnda = DateTime.MinValue; SalvarConfig(); Atualizar(true);
       } });
       acoes.Chips.Add(new Chip { Texto = "posição automática", Acao = delegate { manual = null; SalvarConfig(); Atualizar(true); } });
       acoes.Chips.Add(new Chip { Texto = "esconder 30 min", Acao = delegate { escondidaAte = DateTime.Now.AddMinutes(30); if (painel != null) painel.Encerrar(); AtualizarVisibilidade(); } });
@@ -408,7 +409,7 @@ namespace CotaBarra {
     }
     Aparencia AparenciaAtual() {
       Aparencia a = new Aparencia { Fonte = fonte, NomePaleta = paleta, Barras = estilo != "texto" };
-      a.Letra = tamanho == "pequena" ? 10 : tamanho == "media" ? 11 : tamanho == "grande" ? 13.5 : 12;
+      a.Letra = tamanho == "minima" ? 8 : tamanho == "pequena" ? 10 : tamanho == "media" ? 11 : tamanho == "grande" ? 13.5 : 12;
       a.AlfaFundo = fundo == "transparente" ? 1 : fundo == "translucido" ? 150 : 245;
       a.Claro = tema == "claro" || (tema == "auto" && WindowsClaro());
       return a;
@@ -435,7 +436,8 @@ namespace CotaBarra {
     void MostrarCartao() {
       if (arrastando || painel != null) return;
       try {
-        using (Bitmap b = Desenho.Cartao(listaAtual, posEsc, AparenciaAtual())) {
+        double fatorCartao = tamanhoCartao == "pequeno" ? 0.7 : tamanhoCartao == "normal" ? 1 : 0.85;
+        using (Bitmap b = Desenho.Cartao(listaAtual, posEsc * fatorCartao, AparenciaAtual())) {
           Rectangle m = Nativo.Monitor(BarraAtual());
           int x = Math.Max(m.Left + 8, Math.Min(posX + posL, m.Right - 8) - b.Width);
           if (!cartao.Visible) cartao.Show();

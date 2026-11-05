@@ -536,7 +536,7 @@ namespace CotaBarra {
         fmt.FormatFlags |= StringFormatFlags.MeasureTrailingSpaces | StringFormatFlags.NoWrap;
         List<Seg> linhas = new List<Seg>();
         foreach (Conta c in lista) linhas.Add(Segmentos(c, duas, compacto, a.Barras));
-        const int Celulas = 20;
+        int Celulas = a.Letra < 9 ? 14 : 20;   // no menor tamanho, a barra também encurta
         int cel = Math.Max(2, (int)(px * 0.30)), vaoCel = Math.Max(1, (int)(px * 0.10));
         bool algumaBarra = false;
         int wRot = 0, wUso = 0, wResto = 0, wCinco = 0, wModelo = 0, wIdade = 0, wPrompt, altura;

@@ -62,7 +62,7 @@ Se o programa for barrado, a abertura cai numa versão antiga em PowerShell (`pi
 - **Mouse em cima:** cartão com o detalhe.
 - **Clique:** alterna entre as contas.
 - **Arrastar:** muda de lugar.
-- **Botão direito:** contas, monitor, estilo (barras ou só texto), paleta, onda nas barras, tema, tamanho, fundo, fonte, abrir com o Windows, visual padrão, posição automática, esconder por 30 min e fechar.
+- **Botão direito:** contas, monitor, estilo (barras ou só texto), paleta, onda nas barras, tema, tamanho, tamanho do cartão, fundo, fonte, abrir com o Windows, visual padrão, posição automática, esconder por 30 min e fechar.
 
 A pílula some em tela cheia, foge dos ícones da barra e volta para cima se a barra a cobrir.
 

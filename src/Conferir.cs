@@ -118,6 +118,14 @@ namespace CotaBarra {
         Confere("letra menor deixa a pílula mais baixa", pq.Height < gr.Height, true);
         Confere("nunca passa da altura da barra", gr.Height <= 60, true);
       }
+      using (Bitmap pp = Desenho.Pilula(duas, 1.5, 60, false, new Aparencia { Letra = 8 }))
+      using (Bitmap p10 = Desenho.Pilula(duas, 1.5, 60, false, new Aparencia { Letra = 10 })) {
+        Confere("tamanho mínimo é mais estreito", pp.Width < p10.Width, true);
+        Confere("tamanho mínimo é mais baixo", pp.Height < p10.Height, true);
+      }
+      using (Bitmap c7 = Desenho.Cartao(duas, 1.5 * 0.7, new Aparencia()))
+      using (Bitmap c10 = Desenho.Cartao(duas, 1.5, new Aparencia()))
+        Confere("cartão pequeno é menor", c7.Width < c10.Width && c7.Height < c10.Height, true);
       Confere("fonte que não existe cai numa instalada", Desenho.FonteMono("Fonte Que Nao Existe") != "Fonte Que Nao Existe", true);
       Confere("JetBrains Mono vem com o programa", Desenho.Embutida("JetBrains Mono") != null, true);
       using (Font fb = Desenho.NovaFonte("JetBrains Mono", 14, FontStyle.Bold))
