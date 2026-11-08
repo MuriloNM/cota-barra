@@ -81,7 +81,7 @@ Em `%LOCALAPPDATA%\cota-barra`: preferências e histórico das leituras (percent
 
 ## Janela de 5 h e cota por modelo
 
-Se o plano tiver, elas aparecem com o plugin 0.8 ou mais novo. O cartão mostra a janela de 5 h em barra: cheio é o usado, claro é onde a janela deve fechar na velocidade atual, e o risco é o tempo que já passou.
+Se o plano tiver, elas aparecem com o plugin 0.8 ou mais novo. A cota de um modelo só aparece quando ele tem uso na semana: quem nunca usou o Fable não vê essa linha. O cartão mostra a janela de 5 h em barra: cheio é o usado, claro é onde a janela deve fechar na velocidade atual, e o risco é o tempo que já passou.
 
 ## Para quem for mexer
 

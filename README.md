@@ -89,7 +89,7 @@ In `%LOCALAPPDATA%\cota-barra`: preferences and a history of readings (percentag
 
 ## The 5-hour window and per-model quota
 
-If the plan has them, they show up with plugin 0.8 or newer. The card shows the 5-hour window as a bar: filled is used, light is where the window should close at the current speed, and the tick is how much time has passed.
+If the plan has them, they show up with plugin 0.8 or newer. A model's quota only appears when it has usage this week: someone who never used Fable doesn't see that line. The card shows the 5-hour window as a bar: filled is used, light is where the window should close at the current speed, and the tick is how much time has passed.
 
 ## For developers
 
