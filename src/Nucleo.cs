@@ -429,7 +429,8 @@ namespace CotaBarra {
       return l;
     }
 
-    // Cotas por modelo guardadas como { lido, janelas: [{ nome, percentUsed, resetsAt }] }. Vencida não aparece.
+    // Cotas por modelo guardadas como { lido, janelas: [{ nome, percentUsed, resetsAt }] }. Vencida não aparece,
+    // nem a sem uso: o app manda a do Fable também para quem só o usaria comprando créditos.
     static Dias DiasDe(string conta) { Dias d; return DiasPorConta.TryGetValue(conta, out d) ? d : null; }
     static List<Conta> LerModelos(Dictionary<string, object> json, string conta, DateTimeOffset agora) {
       List<Conta> l = new List<Conta>();
@@ -444,7 +445,7 @@ namespace CotaBarra {
         if (j == null || !j.TryGetValue("nome", out nome) || !j.TryGetValue("percentUsed", out usado) || !j.TryGetValue("resetsAt", out reset)) continue;
         try {
           Conta m = Calcular(new Leitura { Usado = Convert.ToDouble(usado, CultureInfo.InvariantCulture), ResetsAt = Convert.ToString(reset, CultureInfo.InvariantCulture), Lido = Convert.ToInt64(lido, CultureInfo.InvariantCulture) }, Convert.ToString(nome, CultureInfo.InvariantCulture), agora, null, DiasDe(conta));
-          if (m.Estado == "ok" || m.Estado == "velha") l.Add(m);
+          if ((m.Estado == "ok" || m.Estado == "velha") && m.Usado > 0) l.Add(m);
         } catch { }
       }
       return l;
@@ -474,7 +475,8 @@ namespace CotaBarra {
         if (usarHistorico) Historico.Registrar(n + "#5h", l5);
         Calcular5h(c, l5, agora, usarHistorico ? Historico.De(n + "#5h") : null);
         c.Modelos = LerModelos(json, n, agora);
-        if (c.Modelos.Count == 0 && usarHistorico) {
+        // O arquivo à parte só vale se o principal não falou de modelos; se falou, sem uso não pode virar número velho.
+        if ((json == null || !json.ContainsKey("modelos:" + n)) && usarHistorico) {
           string a5m = Arquivo5h();
           if (a5m != null) c.Modelos = LerModelos(LerArquivo(a5m), n, agora);
         }

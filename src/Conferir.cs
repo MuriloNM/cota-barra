@@ -269,8 +269,13 @@ namespace CotaBarra {
       Confere("mesma fórmula: esperado", cm.Modelos[0].Esperado, 50);
       Confere("mesma fórmula: projeção", cm.Modelos[0].Projecao, 120);
       Confere("mesma fórmula: cor", cm.Modelos[0].Cor, "vermelho");
-      File.Delete(tmpM);
-      using (Bitmap sm = Desenho.Pilula(new[] { C(18, 84, 1) }, 1.5, 60, false, new Aparencia())) using (Bitmap cmb = Desenho.Pilula(new[] { cm }, 1.5, 60, false, new Aparencia()))
+      string tmpZ = Path.Combine(Path.GetTempPath(), "cota-barra-teste-" + Guid.NewGuid().ToString("N") + ".json"); File.WriteAllText(tmpZ, "{\"ultima:padrao\":{\"percentUsed\":18,\"resetsAt\":\"" + reset84 + "\",\"lido\":" + lidoMs + "},\"modelos:padrao\":{\"lido\":" + lidoMs + ",\"janelas\":[{\"nome\":\"Fable\",\"percentUsed\":0,\"resetsAt\":\"" + reset84 + "\"}]}}");
+      Conta cz = Cota.Contas(Agora, tmpZ)[0];   // outro arquivo: regravar o mesmo no mesmo instante cairia no cache de leitura
+      Confere("modelo sem uso não aparece", cz.Modelos.Count, 0);
+      using (Bitmap sm = Desenho.Pilula(new[] { C(18, 84, 1) }, 1.5, 60, false, new Aparencia())) using (Bitmap czb = Desenho.Pilula(new[] { cz }, 1.5, 60, false, new Aparencia()))
+        Confere("modelo sem uso não ocupa a pílula", czb.Width, sm.Width);
+      File.Delete(tmpM); File.Delete(tmpZ);
+      using (Bitmap sm =Desenho.Pilula(new[] { C(18, 84, 1) }, 1.5, 60, false, new Aparencia())) using (Bitmap cmb = Desenho.Pilula(new[] { cm }, 1.5, 60, false, new Aparencia()))
         Confere("modelo aparece na pílula", cmb.Width > sm.Width, true);
 
       Console.WriteLine("--- Cota real agora");
