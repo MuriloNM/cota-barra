@@ -1,4 +1,4 @@
-// Leitura do arquivo, fórmula, posição e desenho da pílula e do cartão de detalhe.
+﻿// Leitura do arquivo, fórmula, posição e desenho da pílula e do cartão de detalhe.
 // Só LÊ o arquivo de cota. Não usa rede nem credenciais.
 using System;
 using System.Collections.Generic;
@@ -786,22 +786,60 @@ namespace CotaBarra {
         Func<Conta, string> linhaModelo = m => livre
           ? m.Rotulo.ToLowerInvariant() + ": " + Falta(m.Usado) + "% livre · esperado " + Falta(m.Esperado) + "% · no fim " + Falta(m.Projecao) + "%"
           : m.Rotulo.ToLowerInvariant() + ": " + m.Usado + "% · esperado " + m.Esperado + "% · projeção " + m.Projecao + "%";
-        int larg = wBarra, alt;
+        // A largura é a da barra (ou a da linha dos três números, se for maior). Texto mais comprido quebra nos " · ".
+        int larg = wBarra, alt, folga = (int)(12 * esc);
         float hN, hP;
+        Func<Graphics, string, Font, List<string>> quebrar = (gq, t, f) => {
+          List<string> r = new List<string>();
+          string atual = "";
+          foreach (string pedaco in t.Split(new[] { " · " }, StringSplitOptions.None)) {
+            string junto = atual.Length == 0 ? pedaco : atual + " · " + pedaco;
+            if (atual.Length > 0 && Medir(gq, junto, f, fmt) > larg) { r.Add(atual); atual = pedaco; } else atual = junto;
+          }
+          r.Add(atual);
+          return r;
+        };
+        // Por conta: as linhas já quebradas de cada bloco.
+        var vel = new List<List<string>>(); var ritmo = new List<List<string>>(); var dias = new List<List<string>>(); var l5h = new List<List<string>>();
+        var mods = new List<List<List<string>>>();
+        List<string> legenda;
         using (Bitmap med = new Bitmap(1, 1)) using (Graphics gm = Graphics.FromImage(med)) {
           hN = fN.GetHeight(gm); hP = fP.GetHeight(gm);
           foreach (Conta c in lista) {
-            larg = Math.Max(larg, Medir(gm, linhaRitmo(c), fN, fmt));
-            if (TemNumero(c)) larg = Math.Max(larg, Medir(gm, linhaVel(c), fN, fmt));
-            if (c.Tem5h) larg = Math.Max(larg, Medir(gm, linha5h(c), fN, fmt));
-            if (TemNumero(c) && c.DiasTxt.Length > 0) larg = Math.Max(larg, Medir(gm, c.DiasTxt, fN, fmt));
-            foreach (Conta m in c.Modelos) larg = Math.Max(larg, Medir(gm, linhaModelo(m), fN, fmt));
+            larg = Math.Max(larg, Medir(gm, c.Rotulo.ToLowerInvariant(), fF, fmt) + folga + Medir(gm, "reseta em " + c.RestaTxt, fN, fmt));
+            if (TemNumero(c)) {
+              string u = livre ? Falta(c.Usado) + "% livre" : c.Usado + "% usado";
+              string e = (livre ? Falta(c.Esperado) : c.Esperado) + "% esperado";
+              string q = livre ? Falta(c.Projecao) + "% no fim" : c.Projecao + "% projeção";
+              // "esperado" fica no meio: cada lado precisa caber o maior dos dois números das pontas.
+              larg = Math.Max(larg, 2 * Math.Max(Medir(gm, u, fF, fmt), Medir(gm, q, fN, fmt)) + Medir(gm, e, fN, fmt) + folga * 2);
+            }
+            // Nenhum pedaço entre " · " é cortado: se um sozinho passar da barra, o cartão alarga até ele.
+            foreach (string t in new[] { linhaRitmo(c), TemNumero(c) ? linhaVel(c) : "", c.Tem5h ? linha5h(c) : "", TemNumero(c) ? c.DiasTxt : "" })
+              foreach (string pedaco in t.Split(new[] { " · " }, StringSplitOptions.None)) larg = Math.Max(larg, Medir(gm, pedaco, fN, fmt));
+            foreach (Conta m in c.Modelos)
+              foreach (string pedaco in linhaModelo(m).Split(new[] { " · " }, StringSplitOptions.None)) larg = Math.Max(larg, Medir(gm, pedaco, fN, fmt));
           }
-          larg = Math.Max(larg, Medir(gm, Legenda, fP, fmt));
+          foreach (string pedaco in Legenda.Split(new[] { " · " }, StringSplitOptions.None)) larg = Math.Max(larg, Medir(gm, pedaco, fP, fmt));
+          foreach (Conta c in lista) {
+            vel.Add(TemNumero(c) ? quebrar(gm, linhaVel(c), fN) : new List<string>());
+            ritmo.Add(quebrar(gm, linhaRitmo(c), fN));
+            dias.Add(TemNumero(c) && c.DiasTxt.Length > 0 ? quebrar(gm, c.DiasTxt, fN) : new List<string>());
+            l5h.Add(c.Tem5h ? quebrar(gm, linha5h(c), fN) : new List<string>());
+            var lm = new List<List<string>>();
+            foreach (Conta m in c.Modelos) lm.Add(quebrar(gm, linhaModelo(m), fN));
+            mods.Add(lm);
+          }
+          legenda = quebrar(gm, Legenda, fP);
         }
-        alt = pad * 2 + (int)(hP + 10 * esc);
-        foreach (Conta c in lista)
-          alt += (int)(hN * 2) + (int)(4 * esc) + entre + (TemNumero(c) ? (int)(hN * 2) + altoBarra + (int)(8 * esc) + (c.DiasTxt.Length > 0 ? (int)hN : 0) : 0) + (c.Tem5h ? (int)hN + altoBarra + (int)(10 * esc) : 0) + c.Modelos.Count * (int)hN;
+        alt = pad * 2 + (int)(hP * legenda.Count + 10 * esc);
+        for (int i = 0; i < lista.Count; i++) {
+          Conta c = lista[i];
+          int linhas = ritmo[i].Count + vel[i].Count + dias[i].Count + l5h[i].Count;
+          foreach (List<string> lm in mods[i]) linhas += lm.Count;
+          alt += (int)hN + (int)(4 * esc) + entre + linhas * (int)hN
+            + (TemNumero(c) ? (int)hN + altoBarra + (int)(8 * esc) : 0) + (c.Tem5h ? altoBarra + (int)(10 * esc) : 0);
+        }
         alt -= entre;
         int w = larg + pad * 2;
         Bitmap bmp = new Bitmap(w, alt, PixelFormat.Format32bppPArgb);
@@ -811,7 +849,8 @@ namespace CotaBarra {
           Moldura(g, w, alt, (int)(6 * esc), Color.FromArgb(250, p.Fundo), Color.FromArgb(150, p.Destaque), true);
           using (SolidBrush bT = new SolidBrush(p.Texto)) using (SolidBrush bW = new SolidBrush(p.Fraco)) using (SolidBrush bA = new SolidBrush(p.Alerta)) {
             float y = pad;
-            foreach (Conta c in lista) {
+            for (int i = 0; i < lista.Count; i++) {
+              Conta c = lista[i];
               Color cor = c.Estado == "ok" ? p.DoRitmo(c.Cor) : p.Fraco;
               g.DrawString(c.Rotulo.ToLowerInvariant(), fF, bT, pad, y, fmt);
               if (TemNumero(c)) {
@@ -833,15 +872,10 @@ namespace CotaBarra {
                   g.DrawString(q, fN, bT, w - pad - Medir(g, q, fN, fmt), y, fmt);
                 }
                 y += hN + (int)(2 * esc);
-                g.DrawString(linhaVel(c), fN, c.DiasAte100 >= 0 ? bA : bW, pad, y, fmt);
-                y += hN;
+                foreach (string l in vel[i]) { g.DrawString(l, fN, c.DiasAte100 >= 0 ? bA : bW, pad, y, fmt); y += hN; }
               }
-              g.DrawString(linhaRitmo(c), fN, c.Estado == "velha" ? bA : bW, pad, y, fmt);
-              y += hN;
-              if (TemNumero(c) && c.DiasTxt.Length > 0) {
-                g.DrawString(c.DiasTxt, fN, bW, pad, y, fmt);
-                y += hN;
-              }
+              foreach (string l in ritmo[i]) { g.DrawString(l, fN, c.Estado == "velha" ? bA : bW, pad, y, fmt); y += hN; }
+              foreach (string l in dias[i]) { g.DrawString(l, fN, bW, pad, y, fmt); y += hN; }
               if (c.Tem5h) {
                 // Mesma leitura da barra da semana: cheio é o usado, claro é onde a janela fecha, risco é o tempo que passou.
                 y += (int)(4 * esc);
@@ -849,17 +883,17 @@ namespace CotaBarra {
                 Conta j5 = new Conta { Usado = c.Uso5h, Projecao = c.Proj5h, Esperado = c.Esp5h };
                 Barra(g, pad, (int)y, cel, vao, altoBarra, n, livre ? Espelho(j5) : j5, c.Velha5h ? p.Fraco : p.DoRitmo(ritmo5h), p.Superficie, p.Texto);
                 y += altoBarra + (int)(6 * esc);
-                g.DrawString(linha5h(c), fN, c.Velha5h ? bW : c.Acaba5hMin >= 0 ? bA : bT, pad, y, fmt);
-                y += hN;
+                foreach (string l in l5h[i]) { g.DrawString(l, fN, c.Velha5h ? bW : c.Acaba5hMin >= 0 ? bA : bT, pad, y, fmt); y += hN; }
               }
-              foreach (Conta m in c.Modelos) {
-                using (SolidBrush bM = new SolidBrush(m.Estado == "ok" ? p.DoRitmo(m.Cor) : p.Fraco)) g.DrawString(linhaModelo(m), fN, bM, pad, y, fmt);
-                y += hN;
+              for (int k = 0; k < c.Modelos.Count; k++) {
+                Conta m = c.Modelos[k];
+                using (SolidBrush bM = new SolidBrush(m.Estado == "ok" ? p.DoRitmo(m.Cor) : p.Fraco))
+                  foreach (string l in mods[i][k]) { g.DrawString(l, fN, bM, pad, y, fmt); y += hN; }
               }
               y += entre;
             }
             y -= entre - (int)(Sep * esc);
-            g.DrawString(Legenda, fP, bW, pad, y, fmt);
+            foreach (string l in legenda) { g.DrawString(l, fP, bW, pad, y, fmt); y += hP; }
           }
         }
         return bmp;
