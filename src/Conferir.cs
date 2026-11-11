@@ -169,6 +169,39 @@ namespace CotaBarra {
       comHoje.Add(new Ponto { Lido = Agora.ToUnixTimeMilliseconds(), Usado = 99, Reset = comHoje[0].Reset });
       Confere("hoje, pela metade, não entra", Cota.Inteiro(Vel(50, comHoje).VelDia), 5);
 
+      Console.WriteLine("--- Dias sem leitura");
+      {
+        DateTimeOffset hoje0 = new DateTimeOffset(new DateTime(2026, 11, 20, 12, 0, 0, DateTimeKind.Local)), rs = hoje0.AddDays(3);
+        Func<int, double, DateTimeOffset, Ponto> P = (atras, usado, reset) => new Ponto { Lido = hoje0.AddDays(-atras).ToUnixTimeMilliseconds(), Usado = usado, Reset = reset };
+        int nd;
+        // Nada entre o dia -5 e o dia -1, e subiu 20: são 5 pontos em cada um dos 4 dias, não 20 num dia só.
+        // Com o dia -5, sem uso, ficam 0, 5, 5, 5, 5; sem o maior, a média é 15 / 4.
+        double vao = Cota.DiaTipico(new List<Ponto> { P(6, 0, rs), P(5, 0, rs), P(1, 20, rs) }, hoje0, out nd);
+        Confere("uso sem leitura se divide entre os dias", vao, 3.75.ToString());
+        Confere("os dias do vão contam", nd, 5);
+        Confere("sem leitura e sem subir: dia sem uso", Cota.DiaTipico(new List<Ponto> { P(6, 5, rs), P(5, 5, rs), P(1, 5, rs) }, hoje0, out nd), 0);
+        // A semana virou 3 dias atrás: dos dias -7 a -4, antes da virada, não se sabe nada. Contam -8, -3, -2 e -1.
+        DateTimeOffset rsVelho = rs.AddDays(-7), rsNovo = hoje0.AddDays(4);
+        Cota.DiaTipico(new List<Ponto> { P(9, 0, rsVelho), P(8, 1, rsVelho), P(1, 9, rsNovo) }, hoje0, out nd);
+        Confere("dias antes da virada ficam de fora", nd, 4);
+      }
+
+      Console.WriteLine("--- Histórico em comum com o plugin");
+      {
+        string pasta = Path.Combine(Path.GetTempPath(), "cota-barra-hist-" + Guid.NewGuid().ToString("N"));
+        string antigo = Path.Combine(pasta, "antigo.tsv"), novo = Path.Combine(pasta, @"nova\historico.tsv");
+        Directory.CreateDirectory(pasta);
+        Historico.Migrar(antigo, novo);
+        Confere("sem histórico antigo: não cria nada", File.Exists(novo), false);
+        File.WriteAllText(antigo, "x");
+        Historico.Migrar(antigo, novo);
+        Confere("migra, criando a pasta", File.ReadAllText(novo), "x");
+        File.WriteAllText(antigo, "y");
+        Historico.Migrar(antigo, novo);
+        Confere("não sobrescreve o que já existe", File.ReadAllText(novo), "x");
+        Directory.Delete(pasta, true);
+      }
+
       Console.WriteLine("--- Janela de 5 h");
       Confere("plano sem 5 h: não aparece", V5(null, null).Tem5h, false);
       Confere("reset já passou: não aparece", V5(L(40, -1, 1), null).Tem5h, false);

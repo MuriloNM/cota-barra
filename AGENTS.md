@@ -90,7 +90,7 @@ Then the person chooses: create the exception themselves, or give up on the pill
 
 ## Uninstall
 
-Right-click the pill, turn off "abrir com o windows" if it is on, and click "fechar". Then delete `%LOCALAPPDATA%\Programs\cota-barra` and `%LOCALAPPDATA%\cota-barra`.
+Right-click the pill, turn off "abrir com o windows" if it is on, and click "fechar". Then delete `%LOCALAPPDATA%\Programs\cota-barra`, `%LOCALAPPDATA%\cota-barra` and `%USERPROFILE%\.cota-barra\historico.tsv`.
 
 ## Changing the code
 
