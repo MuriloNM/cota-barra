@@ -70,6 +70,24 @@ namespace CotaBarra {
     public static readonly string[] Nomes = { "dom", "seg", "ter", "qua", "qui", "sex", "sáb" };
     public bool[] Semana = { true, true, true, true, true, true, true };   // índice: DayOfWeek
     public HashSet<DateTime> Folgas = new HashSet<DateTime>();
+    // Horas de sono: saem da conta do esperado em todo dia que conta. Início igual ao fim quer dizer que nada sai.
+    public const string SonoPadrao = "0-6";
+    public int SonoIni = 0, SonoFim = 6;
+    public double HorasSono { get { return (SonoFim - SonoIni + 24) % 24; } }
+    public double HorasAcordado { get { return 24 - HorasSono; } }
+    public string SonoTexto() { return SonoIni + "-" + SonoFim; }
+    public void DefinirSono(string texto) {
+      if (string.IsNullOrEmpty(texto)) return;
+      string[] p = texto.Split('-'); int a, b;
+      if (p.Length != 2 || !int.TryParse(p[0], out a) || !int.TryParse(p[1], out b) || a < 0 || a > 23 || b < 0 || b > 23) return;
+      SonoIni = a; SonoFim = b;
+    }
+    // Quanto de [de, ate), em horas do dia, cai dentro do sono.
+    public double SonoEntre(double de, double ate) {
+      if (SonoIni == SonoFim) return 0;
+      Func<double, double, double> cruza = (i, f) => Math.Max(0, Math.Min(ate, f) - Math.Max(de, i));
+      return SonoIni < SonoFim ? cruza(SonoIni, SonoFim) : cruza(0, SonoFim) + cruza(SonoIni, 24);
+    }
     public bool Ativo(DateTime dia) { return Semana[(int)dia.DayOfWeek] && !Folgas.Contains(dia.Date); }
     public bool TodosDaSemana { get { foreach (bool b in Semana) if (!b) return false; return true; } }
     public string SemanaTexto() {
@@ -77,8 +95,10 @@ namespace CotaBarra {
       for (int i = 0; i < 7; i++) if (Semana[i]) s += i;
       return s;
     }
-    public static Dias De(string semana, string folgas) {
+    public static Dias De(string semana, string folgas) { return De(semana, folgas, null); }
+    public static Dias De(string semana, string folgas, string sono) {
       Dias d = new Dias();
+      d.DefinirSono(sono);
       if (!string.IsNullOrEmpty(semana)) {
         bool[] s = new bool[7]; bool algum = false;
         foreach (char ch in semana) if (ch >= '0' && ch <= '6') { s[ch - '0'] = true; algum = true; }
@@ -105,6 +125,7 @@ namespace CotaBarra {
       foreach (DateTime f in Folgas) if (f >= inicio.Date && f < fim && Semana[(int)f.DayOfWeek]) fs.Add(f);
       fs.Sort();
       if (fs.Count > 0) partes.Add("folga " + string.Join(", ", fs.ConvertAll(f => Nomes[(int)f.DayOfWeek] + " " + f.Day).ToArray()));
+      if (SonoTexto() != SonoPadrao) partes.Add(SonoIni == SonoFim ? "conta a noite toda" : "sono " + SonoIni + "h-" + SonoFim + "h");
       return string.Join(" · ", partes.ToArray());
     }
   }
@@ -276,13 +297,13 @@ namespace CotaBarra {
 
     // Fórmula igual à do plugin.
     public static Conta Calcular(Leitura l, string rotulo, DateTimeOffset agora) { return Calcular(l, rotulo, agora, null); }
-    // Tempo, em ms, dos dias que contam entre dois instantes locais.
+    // Tempo, em ms, dos dias que contam entre dois instantes locais, sem as horas de sono.
     public static double AtivoMs(DateTime a, DateTime b, Dias d) {
       double total = 0;
       for (DateTime dia = a.Date; dia < b; dia = dia.AddDays(1)) {
         if (!d.Ativo(dia)) continue;
         DateTime ini = dia < a ? a : dia, fim = dia.AddDays(1) > b ? b : dia.AddDays(1);
-        if (fim > ini) total += (fim - ini).TotalMilliseconds;
+        if (fim > ini) total += (fim - ini).TotalMilliseconds - d.SonoEntre((ini - dia).TotalHours, (fim - dia).TotalHours) * 3600000;
       }
       return total;
     }
@@ -309,11 +330,12 @@ namespace CotaBarra {
         foreach (KeyValuePair<string, object> kv in j) {
           Dictionary<string, object> o = kv.Value as Dictionary<string, object>;
           if (o == null) continue;
-          object s, f;
+          object s, f, z;
           string semana = o.TryGetValue("semana", out s) ? s as string : null;
+          string sono = o.TryGetValue("sono", out z) ? z as string : null;
           List<string> folgas = new List<string>();
           if (o.TryGetValue("folgas", out f) && f is object[]) foreach (object x in (object[])f) if (x is string) folgas.Add((string)x);
-          DiasPorConta[kv.Key] = Dias.De(semana, string.Join(",", folgas.ToArray()));
+          DiasPorConta[kv.Key] = Dias.De(semana, string.Join(",", folgas.ToArray()), sono);
         }
       } catch { }
       return true;
@@ -329,6 +351,7 @@ namespace CotaBarra {
           foreach (DateTime f in kv.Value.Folgas) if (f >= corte) fs.Add(f.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
           fs.Sort();
           if (fs.Count > 0) o["folgas"] = fs.ToArray();
+          if (kv.Value.SonoTexto() != Dias.SonoPadrao) o["sono"] = kv.Value.SonoTexto();
           if (o.Count > 0) j[kv.Key] = o;
         }
         string a = ArquivoDias();
@@ -364,7 +387,7 @@ namespace CotaBarra {
         double total = AtivoMs(ini, fim, contam);
         if (total > 0) {
           decorrido = Math.Min(Math.Max(AtivoMs(ini, ag, contam) / total, 0), 1);
-          restaDias = AtivoMs(ag, fim, contam) / 86400000;
+          restaDias = AtivoMs(ag, fim, contam) / (contam.HorasAcordado * 3600000);   // em dias inteiros, como o dia típico
         }
         c.DiasTxt = contam.Texto(ini, fim);
       }
@@ -431,7 +454,7 @@ namespace CotaBarra {
 
     // Cotas por modelo guardadas como { lido, janelas: [{ nome, percentUsed, resetsAt }] }. Vencida não aparece,
     // nem a sem uso: o app manda a do Fable também para quem só o usaria comprando créditos.
-    static Dias DiasDe(string conta) { Dias d; return DiasPorConta.TryGetValue(conta, out d) ? d : null; }
+    static Dias DiasDe(string conta) { Dias d; return DiasPorConta.TryGetValue(conta, out d) ? d : new Dias(); }   // sem ajuste, vale o padrão: todos os dias, sem as horas de sono
     static List<Conta> LerModelos(Dictionary<string, object> json, string conta, DateTimeOffset agora) {
       List<Conta> l = new List<Conta>();
       object o;

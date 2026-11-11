@@ -391,6 +391,15 @@ namespace CotaBarra {
           sd.Chips.Add(new Chip { Texto = Dias.Nomes[k], Ativo = () => DiasConta(nome).Semana[k], Acao = delegate { AlternarDia(nome, k); } });
         }
         l.Add(sd);
+        // Horas que saem do esperado. O plugin aceita qualquer horário; se for outro, ele aparece aqui também.
+        Secao ss = new Secao { Titulo = "sono" };
+        List<string> horarios = new List<string> { "0-0", "22-4", "23-5", "0-6", "1-7", "2-8", "23-7" };
+        if (!horarios.Contains(DiasConta(nome).SonoTexto())) horarios.Add(DiasConta(nome).SonoTexto());
+        foreach (string h in horarios) {
+          string v = h;
+          ss.Chips.Add(new Chip { Texto = v == "0-0" ? "não tirar" : v.Replace("-", "h-") + "h", Ativo = () => DiasConta(nome).SonoTexto() == v, Acao = delegate { DiasConta(nome).DefinirSono(v); SalvarConfig(); Atualizar(true); } });
+        }
+        l.Add(ss);
         if (c.ResetEm == default(DateTimeOffset)) continue;
         Secao sf = new Secao { Titulo = "folga" };
         DateTime ini = c.ResetEm.AddDays(-7).ToLocalTime().Date, fim = c.ResetEm.ToLocalTime().DateTime;

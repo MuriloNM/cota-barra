@@ -73,6 +73,7 @@ A pílula some em tela cheia, foge dos ícones da barra e volta para cima se a b
 - **Cor:** verde se o uso está mais de 5 pontos abaixo do esperado, vermelho se está mais de 5 acima, amarelo no resto.
 - **Projeção:** começa pela média da semana (`usado / tempo decorrido`) e passa aos poucos para o dia típico, até 7 dias de histórico. O dia típico atravessa as semanas, conta dias sem uso e ignora o maior a partir de 3 dias. A cor e o esperado seguem a fórmula do plugin.
 - **Dias que contam:** cada conta pode contar só alguns dias da semana (de segunda a sexta no trabalho, por exemplo) e marcar folgas, como um feriado. O esperado só anda nos dias que contam; a projeção e o dia típico ignoram os outros. O ajuste é o mesmo do plugin (0.10 ou mais novo), que também tem `/cota dias seg-sex` e `/cota folga 10/11`, então a linha dentro do Claude segue os mesmos dias.
+- **Horas de sono:** por padrão, 6 horas por dia, da meia-noite às 6h, saem da conta do esperado. Cada conta pode escolher outro horário, ou nenhum se deixa algo rodando à noite, no painel do botão direito ou com `/cota sono 23-5` no plugin (0.11 ou mais novo, necessário para a linha dentro do Claude seguir as mesmas horas).
 - **Quanto falta:** mostra 100 menos cada número. Na barra, cheio é o que deve sobrar no fim, claro é o que está livre agora, e o risco é o que deveria estar livre hoje.
 
 ## O que fica guardado
