@@ -136,6 +136,14 @@ namespace CotaBarra {
     static readonly Dictionary<string, List<Ponto>> pontos = new Dictionary<string, List<Ponto>>();
     static string arquivo;
 
+    // Da pasta antiga para a que o plugin também lê. Só copia se ainda não houver histórico na nova.
+    public static void Migrar(string antigo, string novo) {
+      try {
+        if (File.Exists(novo) || !File.Exists(antigo)) return;
+        Directory.CreateDirectory(Path.GetDirectoryName(novo));
+        File.Copy(antigo, novo);
+      } catch { }
+    }
     public static void Carregar(string caminho, DateTimeOffset agora) {
       arquivo = caminho; pontos.Clear();
       long corte = agora.AddDays(-GuardarDias).ToUnixTimeMilliseconds();
@@ -173,7 +181,7 @@ namespace CotaBarra {
         if (mesmoDia && u.Usado == l.Usado.Value && Math.Abs((u.Reset - reset).TotalMinutes) <= 5) return;
       }
       lista.Add(new Ponto { Lido = l.Lido.Value, Usado = l.Usado.Value, Reset = reset });
-      try { File.AppendAllText(arquivo, conta + "\t" + l.Lido.Value + "\t" + l.Usado.Value.ToString(CultureInfo.InvariantCulture) + "\t" + l.ResetsAt + Environment.NewLine); } catch { }
+      try { Directory.CreateDirectory(Path.GetDirectoryName(arquivo)); File.AppendAllText(arquivo, conta + "\t" + l.Lido.Value + "\t" + l.Usado.Value.ToString(CultureInfo.InvariantCulture) + "\t" + l.ResetsAt + Environment.NewLine); } catch { }
     }
   }
 
@@ -193,14 +201,25 @@ namespace CotaBarra {
       Func<long, DateTime> dia = ms => DateTimeOffset.FromUnixTimeMilliseconds(ms).ToLocalTime().Date;
       DateTime hoje = agora.ToLocalTime().Date, primeiro = dia(pts[0].Lido);
       Dictionary<DateTime, double> porDia = new Dictionary<DateTime, double>();
+      HashSet<DateTime> semDado = new HashSet<DateTime>();
       for (int i = 1; i < pts.Count; i++) {
         bool mesmaSemana = Math.Abs((pts[i].Reset - pts[i - 1].Reset).TotalMinutes) <= 5;
         double delta = mesmaSemana ? Math.Max(pts[i].Usado - pts[i - 1].Usado, 0) : pts[i].Usado;   // semana nova começa do zero
-        DateTime d = dia(pts[i].Lido); double v;
-        porDia.TryGetValue(d, out v); porDia[d] = v + delta;
+        DateTime d = dia(pts[i].Lido), de = dia(pts[i - 1].Lido).AddDays(1);
+        // Sem leitura por dias seguidos: o que subiu se divide entre eles. Se a semana virou no meio, o uso de antes da virada não se sabe.
+        if (!mesmaSemana) {
+          DateTime inicio = pts[i].Reset.AddMilliseconds(-SemanaMs).ToLocalTime().Date;
+          for (DateTime x = de; x < inicio && x < d; x = x.AddDays(1)) semDado.Add(x);
+          if (inicio > de) de = inicio;
+        }
+        List<DateTime> vao = new List<DateTime>();
+        for (DateTime x = de; x <= d; x = x.AddDays(1)) if (contam == null || contam.Ativo(x)) vao.Add(x);
+        if (vao.Count == 0) vao.Add(d);
+        foreach (DateTime x in vao) { double v; porDia.TryGetValue(x, out v); porDia[x] = v + delta / vao.Count; }
       }
       List<double> valores = new List<double>();
       for (DateTime d = hoje.AddDays(-1); d > primeiro && valores.Count < 28; d = d.AddDays(-1)) {   // hoje está pela metade; o primeiro dia também
+        if (semDado.Contains(d)) continue;
         if (contam != null && !contam.Ativo(d)) continue;   // dia que não conta não ensina o dia típico
         double v; porDia.TryGetValue(d, out v); valores.Add(v);
       }
@@ -314,6 +333,10 @@ namespace CotaBarra {
     public static string ArquivoDias() {
       string teste = Environment.GetEnvironmentVariable("COTA_DIAS");   // só para testar
       return !string.IsNullOrEmpty(teste) ? teste : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), @".cota-barra\dias.json");
+    }
+    // O histórico fica na mesma pasta, para o plugin projetar com o mesmo dia típico. Sem pílula, o arquivo não existe e o plugin usa a média.
+    public static string ArquivoHistorico() {
+      return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), @".cota-barra\historico.tsv");
     }
     static DateTime diasLidoEm = DateTime.MinValue;
     // Relê só quando o arquivo muda. Sem arquivo, fica o que já está na memória.

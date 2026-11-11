@@ -79,14 +79,14 @@ The pill hides in full screen, avoids the taskbar icons, and comes back on top i
 - **Sign:** `>` good reading, in the pace color; `~` reading older than 2 h; `x` week expired or no reading.
 - **Bar:** solid up to what you used, light up to the projection, with a tick at what is expected today.
 - **Color:** green if usage is more than 5 points below expected, red if more than 5 above, yellow otherwise.
-- **Projection:** starts from the week's average (`used / elapsed time`) and gradually moves to your typical day, reaching it at 7 days of history. The typical day carries across weeks, counts days without use, and ignores the largest day once there are 3 or more. Color and expected follow the plugin's formula.
+- **Projection:** starts from the week's average (`used / elapsed time`) and gradually moves to your typical day, reaching it at 7 days of history. The typical day carries across weeks, counts days without use, and ignores the largest day once there are 3 or more. When there are days without a reading, what went up is split among them. Color and expected follow the plugin's formula, and the plugin (0.12 or newer) reads the same history, so both show the same projection.
 - **Days that count:** each account can count only some weekdays (Monday to Friday for work, for example) and mark days off, like a holiday. Expected only moves on the days that count; the projection and the typical day skip the rest. The setting is shared with the plugin (0.10 or newer), which also offers `/cota dias seg-sex` and `/cota folga 10/11`, so the line inside Claude follows the same days.
 - **Sleep hours:** by default, 6 hours a day, from midnight to 6 am, are taken out of what is expected. Each account can pick other hours, or none if something keeps running at night, in the right-click panel or with `/cota sono 23-5` in the plugin (0.11 or newer, which the line inside Claude needs to follow the same hours).
 - **What is left:** shows 100 minus each number. On the bar, filled is what should be left at the end, light is what is free now, and the tick is what should be free today.
 
 ## What it stores
 
-In `%LOCALAPPDATA%\cota-barra`: preferences and a history of readings (percentages and dates, up to 56 days). In `%USERPROFILE%\.cota-barra\dias.json`: the days that count and the days off, shared with the plugin.
+In `%LOCALAPPDATA%\cota-barra`: preferences. In `%USERPROFILE%\.cota-barra`, shared with the plugin: `dias.json`, the days that count and the days off, and `historico.tsv`, a history of readings (percentages and dates, up to 56 days).
 
 ## The 5-hour window and per-model quota
 
