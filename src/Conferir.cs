@@ -204,6 +204,26 @@ namespace CotaBarra {
         Confere("texto: todos os dias não escreve nada", CD(qua, CotaBarra.Dias.De("0123456", null)).DiasTxt, "");
         Confere("dias salvos voltam iguais", CotaBarra.Dias.De("135", null).SemanaTexto(), "135");
         Confere("texto: dias soltos", CD(qua, CotaBarra.Dias.De("135", null)).DiasTxt, "conta seg, qua, sex");
+
+        // Sono: cada dia vale 18 h. Quarta às 6h passaram 36 h de 126 h: 29%; às 3h, o esperado segue parado ali.
+        CotaBarra.Dias padrao = new CotaBarra.Dias(), semSono = CotaBarra.Dias.De(null, null, "0-0"), virada = CotaBarra.Dias.De(null, null, "23-5");
+        Confere("sono: quarta 6h esperado 29%", CD(qua.AddHours(6), padrao).Esperado, 29);
+        Confere("sono: parado durante o sono", CD(qua.AddHours(3), padrao).Esperado, CD(qua, padrao).Esperado);
+        Confere("sono: meio-dia anda", CD(qua.AddHours(12), padrao).Esperado, 33);
+        Confere("sono: sem desconto, quarta 12h esperado 36%", CD(qua.AddHours(12), semSono).Esperado, 36);
+        Confere("sono: uma semana inteira tem 126 h", Cota.AtivoMs(seg.DateTime, seg.AddDays(7).DateTime, padrao) / 3600000, 126);
+        Confere("sono que vira a meia-noite: 6 h por dia", Cota.AtivoMs(seg.DateTime, seg.AddDays(7).DateTime, virada) / 3600000, 126);
+        Confere("sono que vira a meia-noite: 23h30 não conta", Cota.AtivoMs(seg.AddHours(23).DateTime, seg.AddHours(24).DateTime, virada), 0);
+        Confere("sono só nos dias que contam", Cota.AtivoMs(seg.DateTime, seg.AddDays(7).DateTime, uteis) / 3600000, 90);
+        Confere("texto: sono padrão não escreve nada", CD(qua, padrao).DiasTxt, "");
+        Confere("texto: outro sono", CD(qua, virada).DiasTxt, "sono 23h-5h");
+        Confere("texto: sem desconto", CD(qua, semSono).DiasTxt, "conta a noite toda");
+        Confere("sono inválido fica no padrão", CotaBarra.Dias.De(null, null, "25-x").SonoTexto(), "0-6");
+        // O dia típico é de 24 h: faltando 2 dias inteiros, projeta 2 dias dele, e não 1,5.
+        DateTimeOffset sabado = seg.AddDays(5);
+        List<Ponto> tipico = new List<Ponto>();
+        for (int i = 0; i < 8; i++) tipico.Add(new Ponto { Lido = sabado.AddDays(i - 8).AddHours(12).ToUnixTimeMilliseconds(), Usado = i * 5, Reset = seg.AddDays(7) });
+        Confere("sono: dias restantes inteiros na projeção", Cota.Calcular(new Leitura { Usado = 50, ResetsAt = seg.AddDays(7).ToString("o"), Lido = sabado.ToUnixTimeMilliseconds() }, "x", sabado, tipico, padrao).Projecao, 60);
       }
 
       Console.WriteLine("--- Arquivo de dias (o mesmo do plugin)");
@@ -216,6 +236,7 @@ namespace CotaBarra {
         Confere("dias da conta", Cota.DiasPorConta["Trabalho"].SemanaTexto(), "12345");
         Confere("folga da conta", Cota.DiasPorConta["Trabalho"].Folgas.Contains(new DateTime(2026, 11, 10)), true);
         Confere("conta sem ajuste: todos os dias", Cota.DiasPorConta["padrao"].TodosDaSemana, true);
+        Confere("conta sem ajuste: sono padrão", Cota.DiasPorConta["padrao"].SonoTexto(), "0-6");
         Cota.DiasPorConta["Trabalho"].Semana[1] = false;
         Cota.GravarDias();
         string gravado = File.ReadAllText(tmpD);
@@ -264,6 +285,10 @@ namespace CotaBarra {
       string tmpM = Path.Combine(Path.GetTempPath(), "cota-barra-teste-" + Guid.NewGuid().ToString("N") + ".json");
       File.WriteAllText(tmpM, "{\"ultima:padrao\":{\"percentUsed\":18,\"resetsAt\":\"" + reset84 + "\",\"lido\":" + lidoMs + "},\"modelos:padrao\":{\"lido\":" + lidoMs + ",\"janelas\":[{\"nome\":\"Fable\",\"percentUsed\":60,\"resetsAt\":\"" + reset84 + "\"},{\"nome\":\"Velho\",\"percentUsed\":5,\"resetsAt\":\"" + resetVelho + "\"}]}}");
       Conta cm = Cota.Contas(Agora, tmpM)[0];
+      Confere("conta sem ajuste já tira o sono", cm.Modelos[0].Esperado, Cota.Calcular(new Leitura { Usado = 60, ResetsAt = reset84, Lido = lidoMs }, "x", Agora, null, new CotaBarra.Dias()).Esperado);
+      Cota.DiasPorConta["padrao"] = CotaBarra.Dias.De(null, null, "0-0");   // daqui em diante, a conta feita à mão é de 24 h
+      cm = Cota.Contas(Agora, tmpM)[0];
+      Cota.DiasPorConta.Clear();
       Confere("lê o modelo; vencido não aparece", cm.Modelos.Count, 1);
       Confere("nome do modelo", cm.Modelos[0].Rotulo, "Fable");
       Confere("mesma fórmula: esperado", cm.Modelos[0].Esperado, 50);
